@@ -14,6 +14,15 @@ import { Tournament, Registration, FilterState } from './types';
 import { INITIAL_TOURNAMENTS } from './data/mockTournaments';
 import { trackPageImpression, logActivity, getEventReports, isAdminAuthenticated } from './utils/activityTracker';
 import {
+  fetchCloudTournaments,
+  publishCloudTournament,
+  saveCloudRegistration,
+  incrementCloudRegistrationCount,
+  deleteCloudTournament,
+  supabase,
+} from './lib/supabase';
+import { isEventRegistrationEnded } from './utils/countdown';
+import {
   Sparkles,
   Search,
   Heart,
@@ -117,7 +126,10 @@ export default function App() {
       if (saved) {
         const parsed: Tournament[] = JSON.parse(saved);
         // Clean out any test or placeholder cards (e.g. 3E2, ASDNAJSD, 33d3d) immediately
-        const cleaned = parsed.filter((item) => !isTestOrPlaceholderTournament(item));
+        // Filter out test cards AND any events whose registration has ended
+        const cleaned = parsed.filter(
+          (item) => !isTestOrPlaceholderTournament(item) && !isEventRegistrationEnded(item)
+        );
 
         // Synchronize initial tournaments with fresh mock data updates (e.g. slot adjustments & flags)
         const merged = cleaned.map((item) => {
@@ -142,9 +154,9 @@ export default function App() {
           return item;
         });
 
-        // Ensure any new initial tournaments exist
+        // Ensure any new initial tournaments exist (and are not expired)
         INITIAL_TOURNAMENTS.forEach((it) => {
-          if (!merged.some((m) => m.id === it.id)) {
+          if (!merged.some((m) => m.id === it.id) && !isEventRegistrationEnded(it)) {
             merged.push(it);
           }
         });
@@ -291,6 +303,123 @@ export default function App() {
     };
   }, []);
 
+  // Fetch tournaments from Supabase cloud on load & subscribe to live updates
+  useEffect(() => {
+    let isMounted = true;
+    const syncCloudData = async () => {
+      try {
+        const cloudTournaments = await fetchCloudTournaments();
+        if (isMounted) {
+          // Identify any tournaments that have ended and remove from cloud & local
+          const expiredCloudItems = cloudTournaments.filter(isEventRegistrationEnded);
+          if (expiredCloudItems.length > 0) {
+            // Delete from Supabase in background
+            expiredCloudItems.forEach((exp) => {
+              deleteCloudTournament(exp.id).catch(console.warn);
+            });
+          }
+
+          const activeCloudTournaments = cloudTournaments.filter(
+            (t) => !isEventRegistrationEnded(t)
+          );
+
+          setTournaments((prev) => {
+            const map = new Map<string, Tournament>();
+            // Add INITIAL_TOURNAMENTS (only active ones)
+            INITIAL_TOURNAMENTS.filter((t) => !isEventRegistrationEnded(t)).forEach((t) => map.set(t.id, t));
+            // Add local storage tournaments (only active ones)
+            prev.filter((t) => !isEventRegistrationEnded(t)).forEach((t) => map.set(t.id, t));
+            // Active cloud tournaments take precedence
+            activeCloudTournaments.forEach((t) => map.set(t.id, t));
+            return Array.from(map.values());
+          });
+        }
+      } catch (err) {
+        console.warn('Initial cloud sync error:', err);
+      }
+    };
+
+    syncCloudData();
+
+    // Listen for real-time inserts from any other user across Nepal
+    const channel = supabase
+      .channel('public:tournaments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tournaments' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const raw = payload.new as any;
+            const newTourn: Tournament = raw.data || {
+              id: raw.id,
+              title: raw.title,
+              category: raw.category,
+              posterUrl: raw.poster_url || 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=1200&q=80',
+              startDate: raw.start_date || '',
+              endDate: raw.start_date || '',
+              time: 'TBD',
+              location: raw.city || 'Nepal',
+              city: raw.city || 'Kathmandu',
+              province: raw.province || 'Bagmati',
+              stateCountry: `${raw.province || 'Bagmati'}, Nepal`,
+              type: 'Open',
+              entryFee: Number(raw.entry_fee) || 0,
+              ageGroup: 'Open',
+              prizePool: 'Trophy & Medals',
+              totalTeams: 16,
+              registeredTeamsCount: 0,
+              hostName: raw.host_name || 'Host',
+              hostEmail: '',
+              hostPhone: '',
+              createdAt: raw.created_at || new Date().toISOString(),
+            };
+            setTournaments((prev) => {
+              if (prev.some((t) => t.id === newTourn.id)) return prev;
+              return [newTourn, ...prev];
+            });
+            showToast(`📢 New Tournament Hosted: "${newTourn.title}"`);
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            const raw = payload.new as any;
+            const updatedTourn: Tournament = raw.data;
+            if (updatedTourn?.id) {
+              setTournaments((prev) =>
+                prev.map((t) => (t.id === updatedTourn.id ? updatedTourn : t))
+              );
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Periodic automatic cleanup: runs every 60 seconds to automatically delete any event whose registration has ended
+  useEffect(() => {
+    const purgeExpired = () => {
+      setTournaments((prev) => {
+        const expired = prev.filter(isEventRegistrationEnded);
+        if (expired.length === 0) return prev;
+
+        // Auto-delete each expired tournament from cloud
+        expired.forEach((exp) => {
+          deleteCloudTournament(exp.id).catch(console.warn);
+        });
+
+        // Filter them out of active tournaments
+        return prev.filter((t) => !isEventRegistrationEnded(t));
+      });
+    };
+
+    // Run on mount and every 60 seconds
+    purgeExpired();
+    const interval = setInterval(purgeExpired, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -301,6 +430,11 @@ export default function App() {
     setTournaments((prev) => [newTournament, ...prev]);
     setHostedTournamentIds((prev) => [newTournament.id, ...prev]);
     
+    // Save to Supabase Cloud so all users worldwide see it
+    publishCloudTournament(newTournament).catch((err) => {
+      console.warn('Could not sync tournament to Supabase cloud:', err);
+    });
+
     // Log platform activity
     logActivity({
       type: 'event_host',
@@ -314,7 +448,7 @@ export default function App() {
       severity: 'info',
     });
 
-    showToast(`"${newTournament.title}" is now published on KataTira!`);
+    showToast(`"${newTournament.title}" is now published live on KataTira!`);
   };
 
   // Handle registration success handler
@@ -328,6 +462,10 @@ export default function App() {
           : t
       )
     );
+
+    // Save registration to cloud and increment slot counter on cloud
+    saveCloudRegistration(newReg).catch(console.warn);
+    incrementCloudRegistrationCount(newReg.tournamentId).catch(console.warn);
 
     // Log platform activity
     logActivity({
@@ -386,6 +524,9 @@ export default function App() {
     setHostedTournamentIds((prev) => prev.filter((id) => id !== tournamentId));
     setInterestedEventIds((prev) => prev.filter((id) => id !== tournamentId));
     setRegistrations((prev) => prev.filter((r) => r.tournamentId !== tournamentId));
+
+    // Delete from Supabase cloud database
+    deleteCloudTournament(tournamentId).catch(console.warn);
 
     logActivity({
       type: 'tournament_delete',
@@ -471,7 +612,12 @@ export default function App() {
   // Filtered & Sorted Tournaments
   const filteredTournaments = useMemo(() => {
     const result = tournaments.filter((t) => {
-      // 0. Concluded / past events filter: hidden by default unless toggled
+      // 0. Auto-exclude any event whose registration has ended
+      if (isEventRegistrationEnded(t)) {
+        return false;
+      }
+
+      // 0b. Concluded / past events filter
       if (!showConcluded && isConcludedTournament(t)) {
         return false;
       }
@@ -845,20 +991,6 @@ export default function App() {
                   <span>Saved ({interestedEventIds.length})</span>
                 </button>
 
-                {/* Past Concluded Events Toggle Pill */}
-                {concludedCount > 0 && (
-                  <button
-                    onClick={() => setShowConcluded(!showConcluded)}
-                    className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-bold transition-all border shrink-0 ${
-                      showConcluded
-                        ? 'bg-slate-800 border-slate-800 text-white shadow-2xs'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                    title="Toggle past concluded events"
-                  >
-                    <span>{showConcluded ? 'Concluded (Active)' : `Past Events (${concludedCount})`}</span>
-                  </button>
-                )}
 
                 {/* Near Me Quick Toggle Pill */}
                 <button

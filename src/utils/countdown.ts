@@ -85,3 +85,40 @@ export function formatCountdownBadge(time: CountdownTime): { text: string; urgen
 
   return { text: `${time.minutes}m ${time.seconds}s left`, urgent: true, label: 'Closing Soon!' };
 }
+
+/**
+ * Checks whether an event's registration period (or event date) has completely passed.
+ * Returns true if registration has closed and event has finished.
+ */
+export function isEventRegistrationEnded(tournament: {
+  registrationDeadline?: string;
+  startDate?: string;
+  endDate?: string;
+  isReliefFund?: boolean;
+}): boolean {
+  // Relief funds stay active indefinitely unless specifically concluded
+  if (tournament.isReliefFund) {
+    return false;
+  }
+
+  const now = Date.now();
+
+  // 1. If explicit registration deadline exists
+  if (tournament.registrationDeadline) {
+    const deadlineTs = getDeadlineTimestamp(tournament.registrationDeadline);
+    if (deadlineTs && now > deadlineTs) {
+      return true;
+    }
+  }
+
+  // 2. If no deadline, check tournament end date or start date
+  const eventDateStr = tournament.endDate || tournament.startDate;
+  if (eventDateStr) {
+    const eventTs = getDeadlineTimestamp(eventDateStr);
+    if (eventTs && now > eventTs) {
+      return true;
+    }
+  }
+
+  return false;
+}

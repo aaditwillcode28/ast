@@ -1065,7 +1065,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                   />
                   <span className="text-[10px] text-slate-500 block">
-                    Last day for teams to register before slots close. KataTira will automatically display an animated countdown timer on your tournament card.
+                    Last day for teams to register. Once this deadline passes (or when the event concludes), KataTira will automatically remove the listing so expired events never clutter the platform.
                   </span>
                 </div>
 

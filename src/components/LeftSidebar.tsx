@@ -246,7 +246,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             Navigation
           </span>
           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Live Nepal
           </span>
         </div>
