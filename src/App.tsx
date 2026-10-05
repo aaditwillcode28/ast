@@ -340,61 +340,6 @@ export default function App() {
     };
 
     syncCloudData();
-
-    // Listen for real-time inserts from any other user across Nepal
-    const channel = supabase
-      .channel('public:tournaments')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'tournaments' },
-        (payload) => {
-          if (payload.eventType === 'INSERT' && payload.new) {
-            const raw = payload.new as any;
-            const newTourn: Tournament = raw.data || {
-              id: raw.id,
-              title: raw.title,
-              category: raw.category,
-              posterUrl: raw.poster_url || 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=1200&q=80',
-              startDate: raw.start_date || '',
-              endDate: raw.start_date || '',
-              time: 'TBD',
-              location: raw.city || 'Nepal',
-              city: raw.city || 'Kathmandu',
-              province: raw.province || 'Bagmati',
-              stateCountry: `${raw.province || 'Bagmati'}, Nepal`,
-              type: 'Open',
-              entryFee: Number(raw.entry_fee) || 0,
-              ageGroup: 'Open',
-              prizePool: 'Trophy & Medals',
-              totalTeams: 16,
-              registeredTeamsCount: 0,
-              hostName: raw.host_name || 'Host',
-              hostEmail: '',
-              hostPhone: '',
-              createdAt: raw.created_at || new Date().toISOString(),
-            };
-            setTournaments((prev) => {
-              if (prev.some((t) => t.id === newTourn.id)) return prev;
-              return [newTourn, ...prev];
-            });
-            showToast(`📢 New Tournament Hosted: "${newTourn.title}"`);
-          } else if (payload.eventType === 'UPDATE' && payload.new) {
-            const raw = payload.new as any;
-            const updatedTourn: Tournament = raw.data;
-            if (updatedTourn?.id) {
-              setTournaments((prev) =>
-                prev.map((t) => (t.id === updatedTourn.id ? updatedTourn : t))
-              );
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      isMounted = false;
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   // Periodic automatic cleanup: runs every 60 seconds to automatically delete any event whose registration has ended
