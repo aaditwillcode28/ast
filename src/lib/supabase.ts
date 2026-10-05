@@ -52,13 +52,19 @@ export interface DbRegistrationRow {
 // 1. Fetch all cloud tournaments
 export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from('tournaments')
       .select('*')
       .order('created_at', { ascending: false });
 
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch timeout' } }), 3500)
+    );
+
+    const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+
     if (error) {
-      console.warn('Supabase fetch error (table may not be created yet):', error.message);
+      console.warn('Supabase fetch notice:', error.message);
       return [];
     }
 
