@@ -35,6 +35,11 @@
     }
     </script>
 
+    <!-- Anti-cache meta tags to prevent browsers from holding stale JavaScript builds -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -48,7 +53,7 @@
           <h2 style="font-size:20px;font-weight:800;margin:0 0 8px 0;color:#ffffff;">KataTira Nepal</h2>
           <p id="initial-loading-text" style="font-size:13px;color:#94a3b8;line-height:1.5;margin:0 0 16px 0;">Loading tournaments and competitions...</p>
           <div id="initial-error-details" style="display:none;background:#090d16;border:1px solid #e11d48;border-radius:12px;padding:12px;text-align:left;font-family:monospace;font-size:11px;color:#fda4af;margin-bottom:16px;word-break:break-all;"></div>
-          <button id="initial-error-btn" style="display:none;width:100%;padding:10px 16px;background:#f97316;color:#ffffff;border:none;border-radius:12px;font-weight:700;font-size:12px;cursor:pointer;" onclick="location.reload()">Reload Page</button>
+          <button id="initial-error-btn" style="display:none;width:100%;padding:10px 16px;background:#f97316;color:#ffffff;border:none;border-radius:12px;font-weight:700;font-size:12px;cursor:pointer;" onclick="if(window.caches){caches.keys().then(function(names){for(var name of names)caches.delete(name);});}window.location.href=window.location.pathname+'?v='+Date.now();">Update & Reload</button>
         </div>
       </div>
     </div>
@@ -59,11 +64,11 @@
         var txt = document.getElementById('initial-loading-text');
         var btn = document.getElementById('initial-error-btn');
         if (el && txt && btn) {
-          txt.textContent = 'Failed to load script or resource:';
+          txt.textContent = 'A new version has been deployed. Please refresh:';
           txt.style.color = '#fb7185';
           el.style.display = 'block';
           btn.style.display = 'block';
-          el.textContent = (e && e.message ? e.message : (e && e.target && e.target.src ? 'Could not load: ' + e.target.src : 'Script loading error'));
+          el.textContent = (e && e.message ? e.message : 'Please tap "Update & Reload" to fetch the latest platform update.');
         }
       }, true);
     </script>
