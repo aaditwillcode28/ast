@@ -21,6 +21,7 @@ import {
   Gamepad2,
   Palette,
   Award,
+  Trophy,
   ShieldCheck,
   ShieldAlert,
   Flag,
@@ -54,7 +55,7 @@ const getCategoryIcon = (category: string) => {
     case 'Football':
       return Award;
     case 'Basketball':
-      return CircleDot;
+      return Trophy;
     case 'MUN & Debate':
       return MessageSquare;
     case 'Case Competition':
