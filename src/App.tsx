@@ -52,11 +52,11 @@ import {
 } from 'lucide-react';
 
 const STORAGE_KEYS = {
-  TOURNAMENTS: 'katatira_tournaments_nepal_v6',
-  REGISTRATIONS: 'katatira_registrations_nepal_v6',
-  HOSTED_IDS: 'katatira_hosted_ids_nepal_v6',
-  USER_INTERESTS: 'katatira_user_interests_v6',
-  INTERESTED_EVENT_IDS: 'katatira_interested_events_v6',
+  TOURNAMENTS: 'katatira_tournaments_nepal_v7',
+  REGISTRATIONS: 'katatira_registrations_nepal_v7',
+  HOSTED_IDS: 'katatira_hosted_ids_nepal_v7',
+  USER_INTERESTS: 'katatira_user_interests_v7',
+  INTERESTED_EVENT_IDS: 'katatira_interested_events_v7',
 };
 
 const DEFAULT_FILTERS: FilterState = {
@@ -75,8 +75,8 @@ const DEFAULT_FILTERS: FilterState = {
 // Category tabs matching Nepal's competitive scene
 const CATEGORY_TABS = [
   { id: 'all', label: 'All Opportunities', icon: LayoutGrid },
-  { id: 'Football', label: 'Football & Futsal', icon: Trophy },
-  { id: 'Basketball', label: 'Basketball', icon: CircleDot },
+  { id: 'Football', label: 'Football & Futsal', icon: Award },
+  { id: 'Basketball', label: 'Basketball', icon: Trophy },
   { id: 'MUN & Debate', label: 'MUNs & Debates', icon: MessageSquare },
   { id: 'Case Competition', label: 'Case Competitions', icon: Briefcase },
   { id: 'Quiz', label: 'Quizzes & Trivia', icon: HelpCircle },

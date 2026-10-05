@@ -64,7 +64,7 @@ export const CATEGORIES_LIST: CategoryItem[] = [
   { 
     id: 'Basketball', 
     label: 'Basketball Tournaments', 
-    icon: CircleDot, 
+    icon: Trophy, 
     color: 'text-orange-600 bg-orange-100',
     description: 'National Basketball League (NeBA), 3v3 streetball showdowns, and open college cups.'
   },
