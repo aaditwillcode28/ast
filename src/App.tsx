@@ -35,6 +35,7 @@ import {
   PlusCircle,
   Compass,
   Trophy,
+  Award,
   CircleDot,
   Activity,
   MessageSquare,

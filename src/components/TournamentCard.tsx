@@ -13,6 +13,7 @@ import {
   Gamepad2,
   Palette,
   Award,
+  Trophy,
   Sparkles,
   ShieldCheck,
   Landmark,

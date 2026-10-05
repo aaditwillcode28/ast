@@ -8,6 +8,7 @@ import {
   HeartHandshake,
   LayoutGrid,
   Award,
+  Trophy,
   CircleDot,
   MessageSquare,
   Briefcase,
