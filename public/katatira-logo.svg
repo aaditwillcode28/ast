@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" fill="none">
+  <!-- Circular container for clean rendering at small sizes (tab favicon, browser bookmark) -->
+  <rect width="500" height="500" rx="110" fill="#0f172a"/>
+  
+  <g transform="translate(25, 20) scale(0.9)">
+    <!-- LEFT ORANGE QUESTION MARK -->
+    <path
+      d="M 125 180 
+         C 105 105, 185 70, 240 95 
+         C 275 110, 275 155, 250 195 
+         C 215 250, 165 265, 195 325 
+         C 205 345, 215 365, 218 385 
+         C 192 375, 182 345, 172 315 
+         C 152 255, 95 240, 108 175 
+         Z"
+      fill="#f97316"
+      stroke="#ffffff"
+      stroke-width="12"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <circle cx="212" cy="425" r="30" fill="#f97316" stroke="#ffffff" stroke-width="12" />
+    <circle cx="205" cy="418" r="8" fill="#ffedd5" />
+
+    <!-- RIGHT QUESTION MARK (Black with orange accent outline) -->
+    <path
+      d="M 270 170 
+         C 255 115, 335 95, 385 120 
+         C 435 145, 435 200, 400 245 
+         C 360 295, 310 315, 325 380 
+         C 328 395, 335 410, 335 425 
+         C 310 410, 300 380, 292 355 
+         C 280 295, 335 270, 365 230 
+         C 390 195, 385 155, 350 140 
+         C 315 125, 275 145, 280 185 
+         Z"
+      fill="#1e293b"
+      stroke="#f97316"
+      stroke-width="16"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <circle cx="326" cy="465" r="28" fill="#1e293b" stroke="#f97316" stroke-width="14" />
+    <circle cx="319" cy="458" r="7" fill="#ffffff" opacity="0.9" />
+  </g>
+</svg>

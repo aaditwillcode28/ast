@@ -1,5 +1,6 @@
 import React from 'react';
 import { PlusCircle, Search, X, Activity } from 'lucide-react';
+import { KataTiraLogo } from './KataTiraLogo';
 
 interface NavbarProps {
   onOpenHostModal: () => void;
@@ -32,15 +33,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => {
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="group flex cursor-pointer items-baseline gap-1.5 transition-transform active:scale-95 shrink-0 select-none"
+          className="group flex cursor-pointer items-center gap-2.5 transition-transform active:scale-95 shrink-0 select-none"
           id="katatira-logo"
         >
-          <span className="font-brand text-2xl sm:text-[27px] font-black tracking-tight text-slate-900 leading-none">
-            Kata<span className="text-orange-500">Tira</span>
-          </span>
-          <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 tracking-wider uppercase">
-            Nepal
-          </span>
+          <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-slate-900 p-1.5 shadow-xs border border-slate-800 group-hover:border-orange-500/50 transition-colors">
+            <KataTiraLogo className="h-full w-full" />
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-brand text-2xl sm:text-[27px] font-black tracking-tight text-slate-900 leading-none">
+              Kata<span className="text-orange-500">Tira</span>
+            </span>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 tracking-wider uppercase">
+              Nepal
+            </span>
+          </div>
         </div>
 
         {/* SEARCH BAR IN HEADER - Keeps left panel uncluttered */}

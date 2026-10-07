@@ -304,17 +304,16 @@ export default function App() {
     };
   }, []);
 
-  // Fetch tournaments from Supabase cloud on load & subscribe to live updates
+  // Fetch tournaments from Supabase cloud on load & seamless background polling
   useEffect(() => {
     let isMounted = true;
-    const syncCloudData = async () => {
+    const syncCloudData = async (isBackground = false) => {
       try {
         const cloudTournaments = await fetchCloudTournaments();
-        if (isMounted) {
+        if (isMounted && cloudTournaments.length > 0) {
           // Identify any tournaments that have ended and remove from cloud & local
           const expiredCloudItems = cloudTournaments.filter(isEventRegistrationEnded);
           if (expiredCloudItems.length > 0) {
-            // Delete from Supabase in background
             expiredCloudItems.forEach((exp) => {
               deleteCloudTournament(exp.id).catch(console.warn);
             });
@@ -326,21 +325,44 @@ export default function App() {
 
           setTournaments((prev) => {
             const map = new Map<string, Tournament>();
-            // Add INITIAL_TOURNAMENTS (only active ones)
+            // Keep active INITIAL_TOURNAMENTS
             INITIAL_TOURNAMENTS.filter((t) => !isEventRegistrationEnded(t)).forEach((t) => map.set(t.id, t));
-            // Add local storage tournaments (only active ones)
+            // Keep local tournaments (e.g. ones just hosted in this session)
             prev.filter((t) => !isEventRegistrationEnded(t)).forEach((t) => map.set(t.id, t));
-            // Active cloud tournaments take precedence
+            // Cloud tournaments merge & update
             activeCloudTournaments.forEach((t) => map.set(t.id, t));
             return Array.from(map.values());
           });
         }
       } catch (err) {
-        console.warn('Initial cloud sync error:', err);
+        if (!isBackground) {
+          console.warn('Initial cloud sync error:', err);
+        }
       }
     };
 
-    syncCloudData();
+    // Run initial sync after DOM is interactive to never delay window onload
+    const timer = setTimeout(() => {
+      syncCloudData(false);
+    }, 200);
+
+    // Seamless background polling: re-check every 25 seconds silently
+    const pollInterval = setInterval(() => {
+      syncCloudData(true);
+    }, 25000);
+
+    // Seamless update when user clicks back into the tab/window
+    const onFocus = () => {
+      syncCloudData(true);
+    };
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
 
   // Periodic automatic cleanup: runs every 60 seconds to automatically delete any event whose registration has ended
