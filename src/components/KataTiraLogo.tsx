@@ -11,7 +11,7 @@ export const KataTiraLogo: React.FC<KataTiraLogoProps> = ({
 }) => {
   return (
     <svg
-      viewBox="0 0 500 500"
+      viewBox="0 0 1000 1000"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
@@ -20,90 +20,127 @@ export const KataTiraLogo: React.FC<KataTiraLogoProps> = ({
       aria-label="KataTira Logo"
     >
       {/* 
-        KataTira Signature Brand Logo:
-        Dual intertwining question marks ("Kata" / "Tira" - "Where / Which way") 
-        facing and curving together in Orange & Black with contrasting outlines to form a heart silhouette.
+        Exact reproduction of uploaded artwork:
+        1. Left: Orange question mark with thick black stroke and white inner hook cutout.
+           Bottom dot: orange circle with white crescent/highlight and black outer stroke.
+        2. Right: Black question mark angled to mirror and complete the heart contour.
+           Orange outer contour accent along the perimeter.
+           Bottom dot: black circle with white crescent highlight and orange outer border.
       */}
-      <g id="katatira-heart-marks">
-        {/* LEFT ORANGE QUESTION MARK (curving right towards center) */}
+      <g>
+        {/* === LEFT QUESTION MARK (ORANGE) === */}
+        {/* Main curved body */}
         <path
-          d="M 125 180 
-             C 105 105, 185 70, 240 95 
-             C 275 110, 275 155, 250 195 
-             C 215 250, 165 265, 195 325 
-             C 205 345, 215 365, 218 385 
-             C 192 375, 182 345, 172 315 
-             C 152 255, 95 240, 108 175 
+          d="M 235 290 
+             C 210 200, 310 160, 420 205 
+             C 495 240, 490 325, 460 365 
+             C 415 300, 330 220, 305 315 
+             C 285 390, 420 460, 400 550 
+             C 388 605, 395 640, 400 660 
+             L 370 660 
+             C 365 625, 345 565, 330 520 
+             C 300 425, 190 380, 235 290 
              Z"
-          fill="#f97316"
-          stroke="#0f172a"
-          strokeWidth="16"
+          fill="#ff6b00"
+          stroke="#000000"
+          strokeWidth="28"
+          strokeLinejoin="round"
           strokeLinecap="round"
+        />
+
+        {/* Left inner white cutout curve that creates the dynamic ribbon hook */}
+        <path
+          d="M 310 300 
+             C 335 225, 410 270, 460 355 
+             C 485 320, 480 250, 420 215 
+             C 335 175, 245 220, 280 320 
+             C 310 405, 355 470, 370 540 
+             C 360 480, 310 420, 275 360 
+             Z"
+          fill="#ffffff"
+          stroke="#000000"
+          strokeWidth="18"
           strokeLinejoin="round"
         />
-        {/* Left Mark Inner Highlight Accent Curve */}
+
+        {/* Left Bottom Dot (Orange circle with black outline and white inner shine) */}
+        <circle
+          cx="425"
+          cy="605"
+          r="52"
+          fill="#ff6b00"
+          stroke="#000000"
+          strokeWidth="24"
+        />
+        {/* Left Dot Inner highlight */}
         <path
-          d="M 155 125 C 190 95, 240 120, 235 155"
-          stroke="#ffedd5"
+          d="M 395 580 C 410 565, 435 565, 450 580"
+          stroke="#ffffff"
           strokeWidth="10"
           strokeLinecap="round"
         />
-        {/* Dot of Left Question Mark */}
-        <circle 
-          cx="212" 
-          cy="425" 
-          r="30" 
-          fill="#f97316" 
-          stroke="#0f172a" 
-          strokeWidth="15" 
-        />
-        <circle 
-          cx="205" 
-          cy="418" 
-          r="8" 
-          fill="#ffedd5" 
-        />
 
-        {/* RIGHT BLACK QUESTION MARK (with orange outer border contour) */}
+
+        {/* === RIGHT QUESTION MARK (BLACK) === */}
+        {/* Orange Outer Silhouette / Accent Halo Outline */}
         <path
-          d="M 270 170 
-             C 255 115, 335 95, 385 120 
-             C 435 145, 435 200, 400 245 
-             C 360 295, 310 315, 325 380 
-             C 328 395, 335 410, 335 425 
-             C 310 410, 300 380, 292 355 
-             C 280 295, 335 270, 365 230 
-             C 390 195, 385 155, 350 140 
-             C 315 125, 275 145, 280 185 
+          d="M 525 360 
+             C 490 260, 610 240, 700 275 
+             C 805 320, 835 440, 770 525 
+             C 670 655, 530 635, 520 735 
+             L 512 745 
+             C 505 640, 650 630, 725 530 
+             C 785 450, 765 345, 680 305 
+             C 605 270, 520 285, 545 375 
              Z"
-          fill="#0f172a"
-          stroke="#f97316"
-          strokeWidth="14"
+          fill="none"
+          stroke="#ff6b00"
+          strokeWidth="48"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Outer Black Protective Halo Outline */}
+
+        {/* Black main body */}
         <path
-          d="M 265 165 C 248 108, 335 88, 390 115 C 445 142, 442 205, 406 252 C 363 303, 313 322, 330 388"
-          stroke="#0f172a"
-          strokeWidth="6"
+          d="M 525 360 
+             C 490 260, 610 240, 700 275 
+             C 805 320, 835 440, 770 525 
+             C 670 655, 530 635, 520 735 
+             L 512 745 
+             C 505 640, 650 630, 725 530 
+             C 785 450, 765 345, 680 305 
+             C 605 270, 520 285, 545 375 
+             Z"
+          fill="#0a0a0a"
+          stroke="#000000"
+          strokeWidth="12"
           strokeLinecap="round"
+          strokeLinejoin="round"
         />
-        {/* Dot of Right Question Mark */}
-        <circle 
-          cx="326" 
-          cy="465" 
-          r="28" 
-          fill="#0f172a" 
-          stroke="#f97316" 
-          strokeWidth="14" 
+
+        {/* Right Bottom Dot (Black with outer orange rim and white crescent shine) */}
+        {/* Orange outer border */}
+        <circle
+          cx="550"
+          cy="715"
+          r="62"
+          fill="#ff6b00"
         />
-        <circle 
-          cx="319" 
-          cy="458" 
-          r="7" 
-          fill="#ffffff" 
-          opacity="0.9"
+        {/* Black inner circle */}
+        <circle
+          cx="550"
+          cy="715"
+          r="48"
+          fill="#0a0a0a"
+          stroke="#000000"
+          strokeWidth="6"
+        />
+        {/* Crescent highlight shine */}
+        <path
+          d="M 565 680 C 585 695, 585 725, 565 745"
+          stroke="#ffffff"
+          strokeWidth="14"
+          strokeLinecap="round"
         />
       </g>
     </svg>
