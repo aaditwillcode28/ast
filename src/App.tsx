@@ -22,6 +22,7 @@ import {
   supabase,
 } from './lib/supabase';
 import { isEventRegistrationEnded } from './utils/countdown';
+import { applyCategorySeo, getSeoConfigForCategory } from './utils/seo';
 import {
   Sparkles,
   Search,
@@ -253,8 +254,21 @@ export default function App() {
     } catch (e) {}
   }, [interestedEventIds]);
 
-  // 6. UI Modals & Navigation State
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  // 6. UI Modals & Navigation State (with URL deep link synchronization for SEO)
+  const [filters, setFilters] = useState<FilterState>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlCategory = params.get('category');
+      if (urlCategory) {
+        const seoConfig = getSeoConfigForCategory(urlCategory);
+        return {
+          ...DEFAULT_FILTERS,
+          category: seoConfig.categoryKey,
+        };
+      }
+    }
+    return DEFAULT_FILTERS;
+  });
   const [sortBy, setSortBy] = useState<'featured' | 'fee_asc' | 'popular'>('featured');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [showConcluded, setShowConcluded] = useState(false);
@@ -273,6 +287,45 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hostModalCategory, setHostModalCategory] = useState<string | undefined>(undefined);
   const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // Synchronize category state with browser URL, history navigation, and Google SEO tags
+  useEffect(() => {
+    const currentCategory = filters.category || 'all';
+    applyCategorySeo(currentCategory);
+
+    // Update browser URL without page refresh (e.g. ?category=football, ?category=basketball)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (currentCategory === 'all' || !currentCategory) {
+        url.searchParams.delete('category');
+      } else {
+        const seoConfig = getSeoConfigForCategory(currentCategory);
+        url.searchParams.set('category', seoConfig.slug);
+      }
+      
+      // Only push state if search param changed to prevent redundant history entries
+      if (url.search !== window.location.search) {
+        window.history.pushState({ category: currentCategory }, '', url.toString());
+      }
+    }
+  }, [filters.category]);
+
+  // Listen to browser Back / Forward buttons (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlCategory = params.get('category');
+      if (urlCategory) {
+        const seoConfig = getSeoConfigForCategory(urlCategory);
+        setFilters((prev) => ({ ...prev, category: seoConfig.categoryKey }));
+      } else {
+        setFilters((prev) => ({ ...prev, category: 'all' }));
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Floating Back to Top scroll listener
   useEffect(() => {
@@ -918,17 +971,39 @@ export default function App() {
             )}
 
             {/* 3. TOOLBAR: RESULTS COUNT, QUICK TOGGLES, CITY & SORT */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
-              {/* Left: Active Title & Count */}
-              <div className="flex items-center gap-2">
-                <h1 className="font-display text-base sm:text-lg font-bold text-slate-900 leading-none">
-                  {filters.searchQuery
-                    ? `Results for "${filters.searchQuery}"`
-                    : activeCategoryMeta.label}
-                </h1>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
-                  {filteredTournaments.length} {filteredTournaments.length === 1 ? 'event' : 'events'}
-                </span>
+            <div className="flex flex-col gap-2 border-b border-slate-200/80 pb-3">
+              {/* Category Landing Page SEO Header (when a specific category is active and no search query) */}
+              {!filters.searchQuery && filters.category !== 'all' && !filters.onlyInterested && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs mb-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200/60">
+                      Nepal Competitive Hub
+                    </span>
+                    <span className="text-[11px] text-slate-400">• Dedicated Directory</span>
+                  </div>
+                  <h1 className="font-display text-lg sm:text-xl font-bold text-slate-900 leading-tight">
+                    {getSeoConfigForCategory(filters.category).heading}
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
+                    {getSeoConfigForCategory(filters.category).subtitle}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                {/* Left: Active Title & Count */}
+                <div className="flex items-center gap-2">
+                  <h2 className="font-display text-base sm:text-lg font-bold text-slate-900 leading-none">
+                    {filters.searchQuery
+                      ? `Results for "${filters.searchQuery}"`
+                      : filters.category === 'all'
+                        ? 'All Opportunities in Nepal'
+                        : `${activeCategoryMeta.label}`}
+                  </h2>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                    {filteredTournaments.length} {filteredTournaments.length === 1 ? 'event' : 'events'}
+                  </span>
+                </div>
               </div>
 
               {/* Right: Quick Action Controls (Smooth horizontal scroll on mobile) */}
