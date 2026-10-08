@@ -23,6 +23,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { Tournament } from '../types';
+import { getEventPageUrl } from '../utils/seo';
 import { formatEventDates } from '../utils/textFormat';
 import { getCategoryFallbackImage } from '../data/mockTournaments';
 import { getWhatsAppShareUrl, shareTournament } from '../utils/calendarAndShare';
@@ -298,9 +299,18 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
 
         {/* Title and Host on Poster Base */}
         <div className="absolute bottom-3 left-3 right-3 space-y-1">
-          <h3 className="font-display text-base sm:text-lg font-bold leading-tight text-white line-clamp-1 group-hover:text-orange-300 transition-colors">
-            {tournament.title}
-          </h3>
+          <a
+            href={getEventPageUrl(tournament.id, tournament.title)}
+            onClick={(e) => {
+              e.preventDefault();
+              onSelect(tournament);
+            }}
+            className="block"
+          >
+            <h3 className="font-display text-base sm:text-lg font-bold leading-tight text-white line-clamp-1 hover:text-orange-300 transition-colors">
+              {tournament.title}
+            </h3>
+          </a>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-xs text-slate-300 line-clamp-1 font-medium">
               By {tournament.hostOrg || tournament.hostName}
@@ -425,8 +435,12 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
 
         {/* PRIMARY CTA - CLEAR & FOCUSED WITH VISUAL HOVER FEEDBACK */}
         <div className="mt-auto pt-2 border-t border-slate-100">
-          <button
-            onClick={() => onSelect(tournament)}
+          <a
+            href={getEventPageUrl(tournament.id, tournament.title)}
+            onClick={(e) => {
+              e.preventDefault();
+              onSelect(tournament);
+            }}
             className={`group/btn w-full flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-xs sm:text-sm font-bold transition-all duration-200 shadow-xs active:scale-[0.98] cursor-pointer ${
               tournament.isCharity
                 ? 'bg-rose-600 hover:bg-rose-500 hover:shadow-md hover:shadow-rose-600/30 text-white border border-rose-500/40 hover:border-rose-400'
@@ -435,7 +449,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
           >
             <span>{tournament.isCharity ? 'View Relief Details & Support' : 'View Details & Register'}</span>
             <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover/btn:translate-x-1" />
-          </button>
+          </a>
         </div>
       </div>
     </div>

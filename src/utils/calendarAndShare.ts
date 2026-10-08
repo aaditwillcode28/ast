@@ -1,5 +1,6 @@
 import { Tournament } from '../types';
 import { formatEventDates } from './textFormat';
+import { getEventPageUrl } from './seo';
 
 /**
  * Generates a direct Google Calendar event creation URL.
@@ -98,7 +99,7 @@ export const getWhatsAppShareUrl = (tournament: Tournament): string => {
     `👤 *Host:* ${tournament.hostOrg || tournament.hostName}`,
     ``,
     `Check details & register on KataTira Nepal:`,
-    `${window.location.origin}`
+    `${getEventPageUrl(tournament.id, tournament.title)}`
   ].join('\n');
 
   return `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
@@ -111,10 +112,11 @@ export const shareTournament = async (
   tournament: Tournament,
   onCopyFallback?: () => void
 ): Promise<boolean> => {
+  const eventUrl = getEventPageUrl(tournament.id, tournament.title);
   const shareData = {
     title: `${tournament.title} | KataTira Nepal`,
     text: `Check out ${tournament.title} happening in ${tournament.city}, Nepal!`,
-    url: window.location.href,
+    url: eventUrl,
   };
 
   if (navigator.share) {

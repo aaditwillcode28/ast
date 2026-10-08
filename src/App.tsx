@@ -22,7 +22,7 @@ import {
   supabase,
 } from './lib/supabase';
 import { isEventRegistrationEnded } from './utils/countdown';
-import { applyCategorySeo, getSeoConfigForCategory } from './utils/seo';
+import { applyCategorySeo, getSeoConfigForCategory, applyEventSeo, slugifyEventTitle } from './utils/seo';
 import {
   Sparkles,
   Search,
@@ -288,14 +288,33 @@ export default function App() {
   const [hostModalCategory, setHostModalCategory] = useState<string | undefined>(undefined);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Synchronize category state with browser URL, history navigation, and Google SEO tags
+  // Synchronize category state & event detail page with browser URL, history navigation, and Google SEO tags
   useEffect(() => {
+    // If an individual event modal/page is open, synchronize its unique URL (?event=ID)
+    if (selectedTournamentDetail) {
+      applyEventSeo(selectedTournamentDetail);
+
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        url.searchParams.set('event', selectedTournamentDetail.id);
+        url.searchParams.set('slug', slugifyEventTitle(selectedTournamentDetail.title));
+        if (url.search !== window.location.search) {
+          window.history.pushState({ eventId: selectedTournamentDetail.id }, '', url.toString());
+        }
+      }
+      return;
+    }
+
+    // Otherwise synchronize category state
     const currentCategory = filters.category || 'all';
     applyCategorySeo(currentCategory);
 
-    // Update browser URL without page refresh (e.g. ?category=football, ?category=basketball)
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
+      // Remove event param when closed
+      url.searchParams.delete('event');
+      url.searchParams.delete('slug');
+
       if (currentCategory === 'all' || !currentCategory) {
         url.searchParams.delete('category');
       } else {
@@ -303,29 +322,45 @@ export default function App() {
         url.searchParams.set('category', seoConfig.slug);
       }
       
-      // Only push state if search param changed to prevent redundant history entries
       if (url.search !== window.location.search) {
         window.history.pushState({ category: currentCategory }, '', url.toString());
       }
     }
-  }, [filters.category]);
+  }, [filters.category, selectedTournamentDetail]);
 
-  // Listen to browser Back / Forward buttons (popstate)
+  // Handle URL on initial load and browser Back / Forward buttons (popstate)
   useEffect(() => {
-    const handlePopState = () => {
+    const syncFromUrl = () => {
       const params = new URLSearchParams(window.location.search);
+      const urlEventId = params.get('event');
       const urlCategory = params.get('category');
+
+      // 1. Direct event URL (e.g. ?event=kt-tourn-1)
+      if (urlEventId) {
+        const matched = tournaments.find((t) => t.id === urlEventId);
+        if (matched) {
+          setSelectedTournamentDetail(matched);
+          return;
+        }
+      } else {
+        setSelectedTournamentDetail(null);
+      }
+
+      // 2. Category URL (e.g. ?category=football)
       if (urlCategory) {
         const seoConfig = getSeoConfigForCategory(urlCategory);
         setFilters((prev) => ({ ...prev, category: seoConfig.categoryKey }));
-      } else {
+      } else if (!urlEventId) {
         setFilters((prev) => ({ ...prev, category: 'all' }));
       }
     };
 
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+    // Run on mount once tournaments are loaded
+    syncFromUrl();
+
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
+  }, [tournaments]);
 
   // Floating Back to Top scroll listener
   useEffect(() => {
