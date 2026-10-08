@@ -36,8 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="group flex cursor-pointer items-center gap-2.5 transition-transform active:scale-95 shrink-0 select-none"
           id="katatira-logo"
         >
-          <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl bg-transparent p-0.5 group-hover:scale-105 transition-transform">
-            <KataTiraLogo className="h-full w-full" />
+          <div className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-xl bg-transparent p-0 group-hover:scale-105 transition-transform shrink-0">
+            <KataTiraLogo className="h-full w-full object-contain" />
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className="font-brand text-2xl sm:text-[27px] font-black tracking-tight text-slate-900 leading-none">
