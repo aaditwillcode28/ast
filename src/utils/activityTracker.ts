@@ -9,189 +9,10 @@ const STORAGE_KEYS = {
   ADMIN_AUTH: 'katatira_admin_auth',
 };
 
-// Seed initial activity logs if none exist
-const INITIAL_ACTIVITIES: ActivityLog[] = [
-  {
-    id: 'act-101',
-    timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(), // 12 mins ago
-    type: 'registration',
-    actor: 'Aayush Shrestha (Everest Strikers)',
-    actorContact: '+977 9841223344',
-    action: 'Registered team for tournament',
-    targetTitle: 'Kathmandu Valley Inter-College Futsal 2026',
-    targetId: 'kt-tourn-1',
-    details: 'Team entry confirmed via host QR payment (Txn ID: ES-882910)',
-    location: 'Kathmandu, Bagmati',
-    severity: 'success',
-  },
-  {
-    id: 'act-102',
-    timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(), // 35 mins ago
-    type: 'event_host',
-    actor: 'Pokhara Tech & Gaming Hub',
-    actorContact: '+977 9802887766',
-    action: 'Hosted new esports championship',
-    targetTitle: 'Nepal National Valorant & PUBG Mobile Open 2026',
-    targetId: 'kt-tourn-3',
-    details: 'Prize pool Rs. 1,00,000 | 32 slots posted',
-    location: 'Pokhara, Gandaki',
-    severity: 'info',
-  },
-  {
-    id: 'act-103',
-    timestamp: new Date(Date.now() - 1000 * 60 * 68).toISOString(), // ~1 hr ago
-    type: 'pass_download',
-    actor: 'Pooja Gurung (Team Pokhara Sparks)',
-    action: 'Downloaded gate entry tournament pass',
-    targetTitle: 'Boudha 3x3 Streetball Open Championship',
-    targetId: 'kt-tourn-2',
-    details: 'Pass Code: KT-PASS-9902 | QR ticket validated',
-    location: 'Lalitpur, Bagmati',
-    severity: 'info',
-  },
-  {
-    id: 'act-104',
-    timestamp: new Date(Date.now() - 1000 * 60 * 110).toISOString(), // ~1.8 hrs ago
-    type: 'report_submit',
-    actor: 'Registered Player (Kritipur)',
-    action: 'Reported event for incorrect prize description',
-    targetTitle: 'Lalitpur Corporate Cricket Cup 2026',
-    targetId: 'kt-tourn-5',
-    details: 'Reported: Host updated cash prize on social poster differently than website listing.',
-    location: 'Kritipur, Kathmandu',
-    severity: 'warning',
-  },
-  {
-    id: 'act-105',
-    timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(), // 3 hrs ago
-    type: 'interest_update',
-    actor: 'Visitor #KT-4412',
-    action: 'Updated event interest notifications',
-    details: 'Subscribed to alerts for: Football, Esports & Gaming, Quiz',
-    location: 'Biratnagar, Koshi',
-    severity: 'info',
-  },
-  {
-    id: 'act-106',
-    timestamp: new Date(Date.now() - 1000 * 60 * 240).toISOString(), // 4 hrs ago
-    type: 'search',
-    actor: 'Visitor #KT-7108',
-    action: 'Searched platform',
-    details: 'Search query: "Badminton Open Kathmandu"',
-    location: 'Bhaktapur, Bagmati',
-    severity: 'info',
-  },
-  {
-    id: 'act-107',
-    timestamp: new Date(Date.now() - 1000 * 60 * 310).toISOString(), // 5 hrs ago
-    type: 'organizer_verify',
-    actor: 'KataTira Admin Desk',
-    action: 'Verified Organizer Credentials',
-    targetTitle: 'Nepal Youth Futsal Association',
-    details: 'PAN document & ground booking agreement verified.',
-    location: 'Central Admin',
-    severity: 'success',
-  },
-];
-
-// Seed initial reports
-const INITIAL_REPORTS: EventReport[] = [
-  {
-    id: 'rep-001',
-    tournamentId: 'kt-tourn-5',
-    tournamentTitle: 'Lalitpur Corporate Cricket Cup 2026',
-    hostName: 'Valley Sports Network',
-    hostPhone: '+977 9851098765',
-    category: 'Cricket',
-    reason: 'Misleading prize pool details',
-    details: 'The flyer distributed by the organizer mentions Rs. 40,000 cash prize while the listing states Rs. 60,000. Please verify with organizer.',
-    reporterContact: '+977 9841998877',
-    timestamp: new Date(Date.now() - 1000 * 60 * 110).toISOString(),
-    status: 'pending',
-    adminNote: '',
-  },
-  {
-    id: 'rep-002',
-    tournamentId: 'kt-tourn-4',
-    tournamentTitle: 'Kathmandu Model United Nations (KMUN 2026)',
-    hostName: 'Nepal Youth Diplomacy Forum',
-    hostPhone: '+977 9841234567',
-    category: 'MUN & Debate',
-    reason: 'Duplicate or expired date',
-    details: 'Early bird deadline was marked expired, host updated venue to Russian Cultural Centre.',
-    reporterContact: 'delegate.np@gmail.com',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
-    status: 'resolved',
-    adminNote: 'Verified with host representative. Date and venue confirmed updated.',
-  },
-];
-
-// Seed initial organizers
-const INITIAL_ORGANIZERS: OrganizerProfile[] = [
-  {
-    id: 'org-1',
-    name: 'Kathmandu Futsal Hub',
-    phone: '+977 9851022334',
-    email: 'info@ktmfutsalhub.com',
-    location: 'Dhapasi, Kathmandu',
-    isVerified: true,
-    verificationDate: '2026-02-15',
-    verificationMethod: 'PAN Registration & Ground Lease Agreement verified',
-    tournamentsCount: 4,
-    documentsSubmitted: ['PAN Certificate', 'Venue Agreement', 'eSewa Merchant KYC'],
-    notes: 'Established futsal arena with over 8 successful tournaments.',
-  },
-  {
-    id: 'org-2',
-    name: 'Nepal Youth Diplomacy Forum',
-    phone: '+977 9841234567',
-    email: 'contact@nepalmun.org',
-    location: 'Kathmandu',
-    isVerified: true,
-    verificationDate: '2026-01-20',
-    verificationMethod: 'Official NGO Registration & UN Youth Partnership letter',
-    tournamentsCount: 2,
-    documentsSubmitted: ['NGO Registration', 'Auditorium Booking Bill'],
-    notes: 'Official organizer of Nepal Model United Nations conferences.',
-  },
-  {
-    id: 'org-3',
-    name: 'Pokhara Tech & Gaming Hub',
-    phone: '+977 9802887766',
-    email: 'esports@pokharagaming.com',
-    location: 'Lakeside, Pokhara',
-    isVerified: true,
-    verificationDate: '2026-02-28',
-    verificationMethod: 'Business Registration & Official Discord verification',
-    tournamentsCount: 3,
-    documentsSubmitted: ['Company Registration', 'Discord Partner Badge'],
-    notes: 'Premier gaming lounge and tournament operator in Gandaki province.',
-  },
-  {
-    id: 'org-4',
-    name: 'Valley Sports Network',
-    phone: '+977 9851098765',
-    email: 'valleysportsnepal@gmail.com',
-    location: 'Patan, Lalitpur',
-    isVerified: false,
-    tournamentsCount: 1,
-    documentsSubmitted: ['Host Contact Form'],
-    notes: 'Pending phone interview and venue booking confirmation receipt.',
-  },
-  {
-    id: 'org-5',
-    name: 'Nepal Red Cross Society Relief Committee',
-    phone: '+977 01-4270650',
-    email: 'relief@nrcs.org',
-    location: 'Red Cross Marg, Tahachal, Kathmandu',
-    isVerified: true,
-    verificationDate: '2026-01-10',
-    verificationMethod: 'Statutory Humanitarian Organization Charter',
-    tournamentsCount: 1,
-    documentsSubmitted: ['Charter & Central Committee Authorization'],
-    notes: 'Official National Red Cross Society disaster relief operator.',
-  },
-];
+// Real activity logs, reports, and organizers are recorded dynamically as organizers and visitors interact with KataTira
+const INITIAL_ACTIVITIES: ActivityLog[] = [];
+const INITIAL_REPORTS: EventReport[] = [];
+const INITIAL_ORGANIZERS: OrganizerProfile[] = [];
 
 // Helper to notify listeners across the app
 const dispatchUpdate = (eventName: string, detail?: unknown) => {
@@ -338,9 +159,9 @@ export const toggleOrganizerVerification = (
       target = {
         id: `org-${Date.now()}`,
         name: organizerIdOrName,
-        phone: '+977 9800000000',
-        email: 'organizer@katatira.np',
-        location: 'Kathmandu, Nepal',
+        phone: '',
+        email: '',
+        location: 'Nepal',
         isVerified: false,
         tournamentsCount: 1,
       };

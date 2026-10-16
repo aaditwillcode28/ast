@@ -11,7 +11,7 @@ import { RegisterInterestsModal } from './components/RegisterInterestsModal';
 import { AdminHubModal } from './components/AdminHubModal';
 import { NepalLegalComplianceModal } from './components/NepalLegalComplianceModal';
 import { Tournament, Registration, FilterState } from './types';
-import { INITIAL_TOURNAMENTS } from './data/mockTournaments';
+import { INITIAL_TOURNAMENTS, isDemoTournament, DEMO_EVENT_IDS } from './data/mockTournaments';
 import { trackPageImpression, logActivity, getEventReports, isAdminAuthenticated } from './utils/activityTracker';
 import {
   fetchCloudTournaments,
@@ -121,53 +121,25 @@ export const isConcludedTournament = (t: Tournament): boolean => {
 };
 
 export default function App() {
-  // 1. Tournaments State (with local storage & automatic data synchronization)
+  // 1. Tournaments State (strictly real events - all demo/fake listings purged)
   const [tournaments, setTournaments] = useState<Tournament[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.TOURNAMENTS);
       if (saved) {
         const parsed: Tournament[] = JSON.parse(saved);
-        // Clean out any test or placeholder cards (e.g. 3E2, ASDNAJSD, 33d3d) immediately
-        // Filter out test cards AND any events whose registration has ended
+        // Completely filter out fake/demo cards, placeholders, expired events
         const cleaned = parsed.filter(
-          (item) => !isTestOrPlaceholderTournament(item) && !isEventRegistrationEnded(item)
+          (item) =>
+            !isTestOrPlaceholderTournament(item) &&
+            !isEventRegistrationEnded(item) &&
+            !isDemoTournament(item)
         );
 
-        // Synchronize initial tournaments with fresh mock data updates (e.g. slot adjustments & flags)
-        const merged = cleaned.map((item) => {
-          const fresh = INITIAL_TOURNAMENTS.find((it) => it.id === item.id);
-          if (fresh) {
-            return { ...item, ...fresh };
-          }
-          if (
-            item.id === 'ev-pm-flood-relief' ||
-            item.id === 'ev-redcross-flood' ||
-            item.title?.toLowerCase().includes('prime minister') ||
-            item.title?.toLowerCase().includes('disaster relief')
-          ) {
-            return {
-              ...item,
-              hasNoSlots: true,
-              isReliefFund: true,
-              totalTeams: 0,
-              registeredTeamsCount: 0,
-            };
-          }
-          return item;
-        });
-
-        // Ensure any new initial tournaments exist (and are not expired)
-        INITIAL_TOURNAMENTS.forEach((it) => {
-          if (!merged.some((m) => m.id === it.id) && !isEventRegistrationEnded(it)) {
-            merged.push(it);
-          }
-        });
-
         try {
-          localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(merged));
+          localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(cleaned));
         } catch (err) {}
 
-        return merged;
+        return cleaned;
       }
     } catch (e) {
       console.error('Error loading tournaments from storage', e);
@@ -180,7 +152,10 @@ export default function App() {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.REGISTRATIONS);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed: Registration[] = JSON.parse(saved);
+        // Clean out any demo tournament registrations
+        const cleaned = parsed.filter((r) => !DEMO_EVENT_IDS.has(r.tournamentId));
+        return cleaned;
       }
     } catch (e) {
       console.error('Error loading registrations from storage', e);
@@ -188,17 +163,19 @@ export default function App() {
     return [];
   });
 
-  // 3. User Hosted Tournament IDs
+  // 3. User Hosted Tournament IDs (clean - no fake event defaults)
   const [hostedTournamentIds, setHostedTournamentIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.HOSTED_IDS);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed: string[] = JSON.parse(saved);
+        const cleaned = parsed.filter((id) => !DEMO_EVENT_IDS.has(id));
+        return cleaned;
       }
     } catch (e) {
       console.error('Error loading hosted ids from storage', e);
     }
-    return ['kt-tourn-1'];
+    return [];
   });
 
   // 4. User Registered Interests (categories)
@@ -212,15 +189,17 @@ export default function App() {
     return ['Football', 'Basketball'];
   });
 
-  // 5. User Bookmarked/Interested Event IDs
+  // 5. User Bookmarked/Interested Event IDs (clean - no fake defaults)
   const [interestedEventIds, setInterestedEventIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.INTERESTED_EVENT_IDS);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed: string[] = JSON.parse(saved);
+        const cleaned = parsed.filter((id) => !DEMO_EVENT_IDS.has(id));
+        return cleaned;
       }
     } catch (e) {}
-    return ['kt-tourn-1', 'kt-tourn-2'];
+    return [];
   });
 
   // Persist states to localStorage
@@ -414,11 +393,11 @@ export default function App() {
           setTournaments((prev) => {
             const map = new Map<string, Tournament>();
             // Keep active INITIAL_TOURNAMENTS
-            INITIAL_TOURNAMENTS.filter((t) => !isEventRegistrationEnded(t)).forEach((t) => map.set(t.id, t));
+            INITIAL_TOURNAMENTS.filter((t) => !isEventRegistrationEnded(t) && !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
             // Keep local tournaments (e.g. ones just hosted in this session)
-            prev.filter((t) => !isEventRegistrationEnded(t)).forEach((t) => map.set(t.id, t));
+            prev.filter((t) => !isEventRegistrationEnded(t) && !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
             // Cloud tournaments merge & update
-            activeCloudTournaments.forEach((t) => map.set(t.id, t));
+            activeCloudTournaments.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
             return Array.from(map.values());
           });
         }

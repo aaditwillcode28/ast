@@ -1,6 +1,6 @@
 {
   "name": "KataTira",
-  "description": "Nepal's premier competition, tournament, and flood disaster relief discovery platform for sports, MUNs, quizzes, case competitions, and verified charity drives.",
+  "description": "Nepal's youth opportunities and competitions discovery platform for sports, football, basketball, MUNs, quizzes, and collegiate tournaments.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
