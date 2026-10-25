@@ -143,8 +143,45 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const bsStartDateStr = formatBsDate(bsStartYear, bsStartMonth, bsStartDay);
   const bsEndDateStr = formatBsDate(bsEndYear, bsEndMonth, bsEndDay);
 
+  // Helper to downscale and compress high-res mobile photos to fast, lightweight web image
+  const compressImageFile = (file: File, maxDim = 1200, quality = 0.82): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const rawUrl = e.target?.result as string;
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(rawUrl);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(rawUrl);
+        img.src = rawUrl;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Handle file upload for poster/pamphlet
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -153,32 +190,34 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      setErrorMsg('Poster image should be under 8MB.');
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMsg('Poster image should be under 15MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setCustomPosterFile(dataUrl);
-      setPosterUrl(dataUrl);
-      setErrorMsg('');
-    };
-    reader.readAsDataURL(file);
+    try {
+      const optimizedDataUrl = await compressImageFile(file, 1200, 0.82);
+      if (optimizedDataUrl) {
+        setCustomPosterFile(optimizedDataUrl);
+        setPosterUrl(optimizedDataUrl);
+        setErrorMsg('');
+      }
+    } catch {
+      setErrorMsg('Could not process image file. Please try another image.');
+    }
   };
 
   // Handle Host Payment QR code upload
-  const handleQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setHostQrFile(dataUrl);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const optimizedQr = await compressImageFile(file, 800, 0.85);
+      if (optimizedQr) {
+        setHostQrFile(optimizedQr);
+      }
+    } catch {}
   };
 
   const handleSubmit = (e: React.FormEvent) => {

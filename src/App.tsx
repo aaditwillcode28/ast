@@ -16,10 +16,12 @@ import { trackPageImpression, logActivity, getEventReports, isAdminAuthenticated
 import {
   fetchCloudTournaments,
   fetchCloudTournamentsWithDeleted,
+  fetchCloudRegistrations,
   publishCloudTournament,
   saveCloudRegistration,
   incrementCloudRegistrationCount,
   deleteCloudTournament,
+  updateCloudTournamentVerification,
   supabase,
 } from './lib/supabase';
 import { isEventRegistrationEnded } from './utils/countdown';
@@ -405,6 +407,56 @@ export default function App() {
           setInterestedEventIds((prev) => prev.filter((id) => !deletedSet.has(id)));
           setRegistrations((prev) => prev.filter((r) => !deletedSet.has(r.tournamentId)));
         }
+
+        // 4. Authoritative multi-device registrations sync
+        try {
+          const cloudRegs = await fetchCloudRegistrations();
+          if (isMounted && cloudRegs.length > 0) {
+            setRegistrations((prev) => {
+              const regMap = new Map<string, Registration>();
+              // Keep local passes
+              prev.forEach((r) => {
+                if (!deletedSet.has(r.tournamentId)) {
+                  regMap.set(r.id, r);
+                }
+              });
+
+              // Merge cloud registrations
+              cloudRegs.forEach((cr) => {
+                if (!deletedSet.has(cr.tournamentId)) {
+                  const matchingT = activeTournaments.find((t) => t.id === cr.tournamentId);
+                  const enriched: Registration = {
+                    ...cr,
+                    tournamentTitle: matchingT?.title || cr.tournamentTitle || 'Tournament Pass',
+                    tournamentPoster: matchingT?.posterUrl || '',
+                    tournamentStartDate: matchingT?.startDate || '',
+                    tournamentEndDate: matchingT?.endDate || '',
+                    tournamentTime: matchingT?.time || '',
+                    tournamentLocation: matchingT?.location || '',
+                    tournamentCity: matchingT?.city || 'Kathmandu',
+                    tournamentType: matchingT?.type || 'Open',
+                    whatsappGroupLink: matchingT?.whatsappGroupLink,
+                    hostName: matchingT?.hostName,
+                  };
+                  const existingLocal = regMap.get(cr.id);
+                  if (existingLocal) {
+                    regMap.set(cr.id, { ...enriched, ...existingLocal });
+                  } else {
+                    regMap.set(cr.id, enriched);
+                  }
+                }
+              });
+
+              const updatedRegs = Array.from(regMap.values());
+              try {
+                localStorage.setItem(STORAGE_KEYS.REGISTRATIONS, JSON.stringify(updatedRegs));
+              } catch {}
+              return updatedRegs;
+            });
+          }
+        } catch (regErr) {
+          console.warn('Registrations sync notice:', regErr);
+        }
       } catch (err) {
         if (!isBackground) {
           console.warn('Initial cloud sync error:', err);
@@ -434,6 +486,13 @@ export default function App() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tournaments' },
+        () => {
+          syncCloudData(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'registrations' },
         () => {
           syncCloudData(true);
         }
@@ -544,6 +603,8 @@ export default function App() {
     setTournaments((prev) =>
       prev.map((t) => (t.id === tournamentId ? { ...t, isHostVerified: isVerified } : t))
     );
+    updateCloudTournamentVerification(tournamentId, isVerified).catch(console.warn);
+    showToast(isVerified ? 'Organizer verified! Badge is now live across KataTira.' : 'Organizer verification badge removed.');
   };
 
   // Permanently delete a tournament from the platform (Admin & Host)
@@ -709,21 +770,34 @@ export default function App() {
       if (filters.selectedDateFilter && filters.selectedDateFilter !== 'all') {
         const startStr = t.startDate || t.date || '';
         const endStr = t.endDate || t.startDate || t.date || '';
-        const today = '2026-10-02';
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
 
         if (filters.selectedDateFilter === 'this_weekend') {
-          // Weekend: Friday Oct 2 to Sunday Oct 4
-          const weekendStart = '2026-10-02';
-          const weekendEnd = '2026-10-05';
+          // Upcoming weekend (Friday to Sunday in Nepal)
+          const currentDay = now.getDay(); // 0 is Sunday, 5 is Friday, 6 is Saturday
+          const daysToFriday = (5 - currentDay + 7) % 7;
+          const friday = new Date(now);
+          friday.setDate(now.getDate() + (daysToFriday === 0 && currentDay !== 5 ? 7 : daysToFriday));
+          const sunday = new Date(friday);
+          sunday.setDate(friday.getDate() + 2);
+          const weekendStart = friday.toISOString().split('T')[0];
+          const weekendEnd = sunday.toISOString().split('T')[0];
+
           const overlapsWeekend = (startStr <= weekendEnd && endStr >= weekendStart) || t.isReliefFund;
           if (!overlapsWeekend) return false;
         } else if (filters.selectedDateFilter === 'next_7_days') {
-          const sevenDaysLater = '2026-10-09';
-          const within7Days = (startStr <= sevenDaysLater && endStr >= today) || t.isReliefFund;
+          const sevenDays = new Date(now);
+          sevenDays.setDate(now.getDate() + 7);
+          const sevenDaysLater = sevenDays.toISOString().split('T')[0];
+          const within7Days = (startStr <= sevenDaysLater && endStr >= todayStr) || t.isReliefFund;
           if (!within7Days) return false;
         } else if (filters.selectedDateFilter === 'this_month') {
-          const monthEnd = '2026-10-31';
-          const withinMonth = (startStr <= monthEnd && endStr >= '2026-10-01') || t.isReliefFund;
+          const year = now.getFullYear();
+          const month = now.getMonth();
+          const firstDayOfMonth = new Date(year, month, 1).toISOString().split('T')[0];
+          const lastDayOfMonth = new Date(year, month + 1, 0).toISOString().split('T')[0];
+          const withinMonth = (startStr <= lastDayOfMonth && endStr >= firstDayOfMonth) || t.isReliefFund;
           if (!withinMonth) return false;
         }
       }

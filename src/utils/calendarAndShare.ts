@@ -19,9 +19,9 @@ export const getGoogleCalendarUrl = (tournament: Tournament): string => {
   );
 
   // Format dates to YYYYMMDD
-  const startRaw = (tournament.startDate || tournament.date || '2026-10-01').replace(/-/g, '');
-  // For end date, default to start or next day
-  const endRaw = (tournament.endDate || tournament.startDate || tournament.date || '2026-10-01').replace(/-/g, '');
+  const todayRaw = new Date().toISOString().split('T')[0].replace(/-/g, '');
+  const startRaw = (tournament.startDate || tournament.date || '').replace(/-/g, '') || todayRaw;
+  const endRaw = (tournament.endDate || tournament.startDate || tournament.date || '').replace(/-/g, '') || startRaw;
 
   // Full day event or standard 8-hour span format: YYYYMMDD/YYYYMMDD (or with T000000Z)
   const dates = `${startRaw}T030000Z/${endRaw}T120000Z`;
@@ -33,8 +33,9 @@ export const getGoogleCalendarUrl = (tournament: Tournament): string => {
  * Generates an iCalendar (.ics) file string and triggers browser download.
  */
 export const downloadIcsFile = (tournament: Tournament): void => {
-  const startRaw = (tournament.startDate || tournament.date || '2026-10-01').replace(/-/g, '');
-  const endRaw = (tournament.endDate || tournament.startDate || tournament.date || '2026-10-01').replace(/-/g, '');
+  const todayRaw = new Date().toISOString().split('T')[0].replace(/-/g, '');
+  const startRaw = (tournament.startDate || tournament.date || '').replace(/-/g, '') || todayRaw;
+  const endRaw = (tournament.endDate || tournament.startDate || tournament.date || '').replace(/-/g, '') || startRaw;
 
   const nowIso = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   const uid = `${tournament.id}-${Date.now()}@katatira.np`;

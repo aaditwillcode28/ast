@@ -800,9 +800,9 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
 
           {/* TAB: TOURNAMENTS & EVENTS MANAGEMENT (DELETE EVENTS & CLEAN FINISHED) */}
           {activeTab === 'tournaments' && (() => {
-            const today = '2026-09-26';
+            const today = new Date().toISOString().split('T')[0];
             const isFinishedEvent = (t: Tournament) => {
-              if (t.isReliefFund || t.hasNoSlots || t.id.startsWith('ev-pm-') || t.id.startsWith('ev-redcross-')) {
+              if (t.isReliefFund || t.hasNoSlots) {
                 return false;
               }
               const d = t.endDate || t.startDate || t.date;

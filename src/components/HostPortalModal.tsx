@@ -25,7 +25,8 @@ interface HostPortalModalProps {
 export const HostPortalModal: React.FC<HostPortalModalProps> = ({
   isOpen,
   onClose,
-  hostedTournaments,
+  hostedTournaments = [],
+  allRegistrations = [],
   onOpenHostModal,
   onSelectTournament,
   onDeleteTournament,
@@ -150,8 +151,11 @@ export const HostPortalModal: React.FC<HostPortalModalProps> = ({
                               {t.type}
                             </span>
                             <span className="text-xs text-slate-500">{t.ageGroup}</span>
+                            <span className="rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                              {allRegistrations.filter((r) => r.tournamentId === t.id).length} Registered
+                            </span>
                             <span className="text-xs font-semibold text-slate-700">
-                              {totalTeamsCount} Teams
+                              {totalTeamsCount} Max Teams
                             </span>
                             <span className="text-xs font-bold text-slate-800">
                               {t.entryFee === 0 ? 'FREE' : `Rs. ${t.entryFee.toLocaleString()}`}

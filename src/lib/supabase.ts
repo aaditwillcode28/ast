@@ -287,3 +287,65 @@ export const deleteCloudTournament = async (tournamentId: string): Promise<boole
     return false;
   }
 };
+
+// 6. Fetch all cloud registrations for multi-device sync
+export const fetchCloudRegistrations = async (): Promise<Registration[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('registrations')
+      .select('*')
+      .neq('id', 'test-reg-1')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((row: any) => ({
+      id: row.id,
+      tournamentId: row.tournament_id || '',
+      tournamentTitle: 'Opportunity Registration',
+      tournamentPoster: '',
+      tournamentStartDate: '',
+      tournamentEndDate: '',
+      tournamentTime: '',
+      tournamentLocation: '',
+      tournamentCity: '',
+      tournamentType: 'Open',
+      teamName: row.team_name || row.participant_name || 'Participant',
+      contactEmail: row.contact_email || '',
+      contactPhone: row.contact_phone || '',
+      entryFee: Number(row.amount) || 0,
+      totalAmount: Number(row.amount) || 0,
+      paymentMethod: (row.payment_method as any) || 'fonepay',
+      transactionId: row.payment_reference || '',
+      paymentStatus: (row.status === 'confirmed' ? 'confirmed' : 'pending') as any,
+      registeredAt: row.created_at || new Date().toISOString(),
+      confirmationCode: row.pass_code || row.id,
+      ticketQrCode: row.pass_code || row.id,
+    }));
+  } catch (err) {
+    console.error('Failed to query cloud registrations:', err);
+    return [];
+  }
+};
+
+// 7. Update verification status of a tournament in Supabase
+export const updateCloudTournamentVerification = async (
+  tournamentId: string,
+  isVerified: boolean
+): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('tournaments')
+      .update({ is_verified: isVerified })
+      .eq('id', tournamentId);
+
+    if (error) {
+      console.warn('Error updating verification status in cloud:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updating tournament verification in cloud:', err);
+    return false;
+  }
+};
