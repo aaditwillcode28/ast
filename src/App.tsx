@@ -15,6 +15,7 @@ import { INITIAL_TOURNAMENTS, isDemoTournament, DEMO_EVENT_IDS } from './data/mo
 import { trackPageImpression, logActivity, getEventReports, isAdminAuthenticated } from './utils/activityTracker';
 import {
   fetchCloudTournaments,
+  fetchCloudTournamentsWithDeleted,
   publishCloudTournament,
   saveCloudRegistration,
   incrementCloudRegistrationCount,
@@ -354,27 +355,55 @@ export default function App() {
     };
   }, []);
 
-  // Fetch tournaments from Supabase cloud on load & seamless background polling
+  // Fetch tournaments from Supabase cloud on load, background polling & realtime sync
   useEffect(() => {
     let isMounted = true;
     const syncCloudData = async (isBackground = false) => {
       try {
-        const cloudTournaments = await fetchCloudTournaments();
-        if (isMounted && cloudTournaments.length > 0) {
-          const savedDeleted = localStorage.getItem('katatira_deleted_ids');
-          const deletedList: string[] = savedDeleted ? JSON.parse(savedDeleted) : [];
-          const deletedSet = new Set(deletedList);
+        const { activeTournaments, deletedIds } = await fetchCloudTournamentsWithDeleted();
+        if (!isMounted) return;
 
-          setTournaments((prev) => {
-            const map = new Map<string, Tournament>();
-            // Keep active INITIAL_TOURNAMENTS
-            INITIAL_TOURNAMENTS.filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id)).forEach((t) => map.set(t.id, t));
-            // Keep local tournaments (e.g. newly hosted in this session)
-            prev.filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id)).forEach((t) => map.set(t.id, t));
-            // Cloud tournaments merge & update (authoritative cloud sync)
-            cloudTournaments.filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id)).forEach((t) => map.set(t.id, t));
-            return Array.from(map.values());
+        // 1. Update deletedSet with IDs confirmed deleted in Supabase cloud
+        const savedDeleted = localStorage.getItem('katatira_deleted_ids');
+        const localDeletedList: string[] = savedDeleted ? JSON.parse(savedDeleted) : [];
+        const mergedDeleted = Array.from(new Set([...localDeletedList, ...deletedIds]));
+        try {
+          localStorage.setItem('katatira_deleted_ids', JSON.stringify(mergedDeleted));
+        } catch {}
+        const deletedSet = new Set(mergedDeleted);
+
+        // 2. Set authoritative active tournaments
+        setTournaments((prev) => {
+          const map = new Map<string, Tournament>();
+
+          // Cloud active tournaments are authoritative
+          activeTournaments
+            .filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id))
+            .forEach((t) => map.set(t.id, t));
+
+          // Retain local listings only if created within the last 45 seconds on this device (optimistic UI)
+          const now = Date.now();
+          prev.forEach((t) => {
+            const age = now - (new Date(t.createdAt).getTime() || 0);
+            if (age < 45000 && !deletedSet.has(t.id) && !isDemoTournament(t)) {
+              if (!map.has(t.id)) {
+                map.set(t.id, t);
+              }
+            }
           });
+
+          const finalList = Array.from(map.values());
+          try {
+            localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(finalList));
+          } catch {}
+          return finalList;
+        });
+
+        // 3. Clean up deleted tournaments from other states on this device
+        if (deletedIds.length > 0) {
+          setHostedTournamentIds((prev) => prev.filter((id) => !deletedSet.has(id)));
+          setInterestedEventIds((prev) => prev.filter((id) => !deletedSet.has(id)));
+          setRegistrations((prev) => prev.filter((r) => !deletedSet.has(r.tournamentId)));
         }
       } catch (err) {
         if (!isBackground) {
@@ -383,15 +412,15 @@ export default function App() {
       }
     };
 
-    // Run initial sync after DOM is interactive to never delay window onload
+    // Run initial sync after DOM is interactive
     const timer = setTimeout(() => {
       syncCloudData(false);
-    }, 100);
+    }, 50);
 
-    // Seamless background polling: re-check every 15 seconds silently
+    // Seamless background polling: re-check every 8 seconds silently
     const pollInterval = setInterval(() => {
       syncCloudData(true);
-    }, 15000);
+    }, 8000);
 
     // Seamless update when user clicks back into the tab/window
     const onFocus = () => {
@@ -399,11 +428,24 @@ export default function App() {
     };
     window.addEventListener('focus', onFocus);
 
+    // Supabase Realtime channel subscription for instant multi-device reflection
+    const channel = supabase
+      .channel('katatira-tournaments-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tournaments' },
+        () => {
+          syncCloudData(true);
+        }
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
       clearTimeout(timer);
       clearInterval(pollInterval);
       window.removeEventListener('focus', onFocus);
+      supabase.removeChannel(channel);
     };
   }, []);
 

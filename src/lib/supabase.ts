@@ -19,13 +19,17 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
-// 1. Fetch all cloud tournaments
-export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
+export interface CloudSyncResult {
+  activeTournaments: Tournament[];
+  deletedIds: string[];
+}
+
+// 1. Fetch both active tournaments and deleted IDs from Supabase cloud
+export const fetchCloudTournamentsWithDeleted = async (): Promise<CloudSyncResult> => {
   try {
     const fetchPromise = supabase
       .from('tournaments')
       .select('*')
-      .neq('status', 'deleted')
       .order('created_at', { ascending: false });
 
     const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
@@ -36,14 +40,22 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
 
     if (error) {
       console.warn('Supabase fetch notice:', error.message);
-      return [];
+      return { activeTournaments: [], deletedIds: [] };
     }
 
-    if (!data || data.length === 0) return [];
+    if (!data || data.length === 0) {
+      return { activeTournaments: [], deletedIds: [] };
+    }
 
-    return data
-      .filter((row: any) => row.status !== 'deleted')
-      .map((row: any) => {
+    const deletedIds: string[] = [];
+    const activeTournaments: Tournament[] = [];
+
+    for (const row of data) {
+      if (row.status === 'deleted') {
+        deletedIds.push(row.id);
+        continue;
+      }
+
       // Parse extra rich metadata packed in rules column
       let extra: Partial<Tournament> = {};
       if (row.rules && typeof row.rules === 'string' && row.rules.startsWith('{')) {
@@ -99,12 +111,20 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
         createdAt: row.created_at || new Date().toISOString(),
       };
 
-      return tournament;
-    });
+      activeTournaments.push(tournament);
+    }
+
+    return { activeTournaments, deletedIds };
   } catch (err) {
     console.error('Failed to query cloud tournaments:', err);
-    return [];
+    return { activeTournaments: [], deletedIds: [] };
   }
+};
+
+// Backward-compatible wrapper
+export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
+  const result = await fetchCloudTournamentsWithDeleted();
+  return result.activeTournaments;
 };
 
 // 2. Publish a new tournament to Supabase (exact schema alignment)
