@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { Tournament, Registration } from '../types';
+import { DEFAULT_POSTER_FALLBACK } from '../data/mockTournaments';
 
 // Supabase configuration
-// Using the project URL (without /rest/v1/) and anon/publishable key
 export const SUPABASE_URL = 'https://tevzpqfoaumgzpljimrc.supabase.co';
 export const SUPABASE_ANON_KEY = 'sb_publishable_C6EM7jUC3LIFWUKqYOyP5Q_NM4Ik2pv';
 
@@ -19,36 +19,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
-// Database record type definitions (JSON column stores the full rich tournament object)
-export interface DbTournamentRow {
-  id: string;
-  title: string;
-  category: string;
-  city: string;
-  province?: string;
-  entry_fee: number;
-  start_date: string;
-  host_name?: string;
-  is_verified?: boolean;
-  is_relief?: boolean;
-  data: Tournament;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface DbRegistrationRow {
-  id: string;
-  tournament_id: string;
-  team_name: string;
-  contact_phone: string;
-  contact_email: string;
-  confirmation_code: string;
-  payment_method: string;
-  amount: number;
-  data: Registration;
-  created_at?: string;
-}
-
 // 1. Fetch all cloud tournaments
 export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
   try {
@@ -58,7 +28,7 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
       .order('created_at', { ascending: false });
 
     const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch timeout' } }), 3500)
+      setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch timeout' } }), 4000)
     );
 
     const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
@@ -71,43 +41,62 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
     if (!data || data.length === 0) return [];
 
     return data.map((row: any) => {
-      // If row has JSON 'data' payload, merge it
-      if (row.data && typeof row.data === 'object') {
-        return {
-          ...row.data,
-          id: row.id || row.data.id,
-          title: row.title || row.data.title,
-          category: row.category || row.data.category,
-          city: row.city || row.data.city,
-          entryFee: row.entry_fee ?? row.data.entryFee,
-          startDate: row.start_date || row.data.startDate,
-        };
+      // Parse extra rich metadata packed in rules column
+      let extra: Partial<Tournament> = {};
+      if (row.rules && typeof row.rules === 'string' && row.rules.startsWith('{')) {
+        try {
+          extra = JSON.parse(row.rules);
+        } catch {}
       }
-      // Or construct from flattened columns
-      return {
+
+      const tournament: Tournament = {
         id: row.id,
-        title: row.title,
-        category: row.category,
-        posterUrl: row.poster_url || row.banner_url || 'https://images.unsplash.com/photo-1547683905-f686c993aae5?auto=format&fit=crop&w=1200&q=80',
+        title: row.title || 'Untitled Opportunity',
+        category: row.category || 'Other',
+        posterUrl: row.banner_url || extra.posterUrl || DEFAULT_POSTER_FALLBACK,
         startDate: row.start_date || '',
         endDate: row.end_date || row.start_date || '',
-        time: row.time || 'TBD',
-        location: row.venue || row.location || 'Nepal',
+        calendarType: extra.calendarType || 'AD',
+        bsStartDate: extra.bsStartDate,
+        bsEndDate: extra.bsEndDate,
+        time: row.time || extra.time || 'TBD',
+        location: row.venue || extra.location || `${row.city || 'Kathmandu'}, Nepal`,
         city: row.city || 'Kathmandu',
         province: row.province || 'Bagmati',
         stateCountry: `${row.province || 'Bagmati'}, Nepal`,
-        type: row.format || row.type || 'Open',
+        type: row.format || extra.type || 'Open',
         entryFee: Number(row.entry_fee) || 0,
-        ageGroup: row.age_group || 'Open',
-        prizePool: row.prize_pool || 'Trophy & Medals',
+        ageGroup: extra.ageGroup || 'Open',
+        prizePool: row.prize_pool || extra.prizePool || 'Trophy & Medals',
         totalTeams: Number(row.max_participants) || 16,
         registeredTeamsCount: Number(row.current_participants) || 0,
-        hostName: row.organizer || row.host_name || 'Event Host',
-        hostEmail: row.contact_email || row.host_email || '',
-        hostPhone: row.contact_phone || row.host_phone || '',
+        hostName: row.organizer || extra.hostName || 'Event Host',
+        hostEmail: row.contact_email || extra.hostEmail || '',
+        hostPhone: row.contact_phone || extra.hostPhone || '',
+        hostOrg: extra.hostOrg,
         description: row.description || '',
+        audienceAdmission: extra.audienceAdmission,
+        isFeatured: Boolean(extra.isFeatured),
+        officialLink: extra.officialLink,
+        isCharity: Boolean(row.is_relief || extra.isCharity),
+        isReliefFund: Boolean(row.is_relief || extra.isReliefFund),
+        donationLink: extra.donationLink,
+        causeTitle: extra.causeTitle || row.relief_beneficiary,
+        reliefBankDetails: extra.reliefBankDetails,
+        hostPaymentQrUrl: extra.hostPaymentQrUrl,
+        hostPaymentMethod: extra.hostPaymentMethod,
+        hostPaymentNumber: extra.hostPaymentNumber,
+        hostPaymentInstructions: extra.hostPaymentInstructions,
+        socialLinks: extra.socialLinks,
+        whatsappGroupLink: extra.whatsappGroupLink,
+        isHostVerified: Boolean(row.is_verified || extra.isHostVerified),
+        hostVerificationType: extra.hostVerificationType,
+        transparencyNote: extra.transparencyNote,
+        registrationDeadline: row.registration_deadline || extra.registrationDeadline,
         createdAt: row.created_at || new Date().toISOString(),
-      } as Tournament;
+      };
+
+      return tournament;
     });
   } catch (err) {
     console.error('Failed to query cloud tournaments:', err);
@@ -115,21 +104,72 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
   }
 };
 
-// 2. Publish a new tournament to Supabase
+// 2. Publish a new tournament to Supabase (exact schema alignment)
 export const publishCloudTournament = async (tournament: Tournament): Promise<{ success: boolean; error?: string }> => {
   try {
+    // Pack rich frontend attributes into the rules JSON column so no information is lost
+    const extraMetadata = {
+      posterUrl: tournament.posterUrl,
+      calendarType: tournament.calendarType,
+      bsStartDate: tournament.bsStartDate,
+      bsEndDate: tournament.bsEndDate,
+      time: tournament.time,
+      location: tournament.location,
+      type: tournament.type,
+      ageGroup: tournament.ageGroup,
+      prizePool: tournament.prizePool,
+      hostOrg: tournament.hostOrg,
+      audienceAdmission: tournament.audienceAdmission,
+      isFeatured: tournament.isFeatured,
+      officialLink: tournament.officialLink,
+      isCharity: tournament.isCharity,
+      isReliefFund: tournament.isReliefFund,
+      donationLink: tournament.donationLink,
+      causeTitle: tournament.causeTitle,
+      reliefBankDetails: tournament.reliefBankDetails,
+      hostPaymentQrUrl: tournament.hostPaymentQrUrl,
+      hostPaymentMethod: tournament.hostPaymentMethod,
+      hostPaymentNumber: tournament.hostPaymentNumber,
+      hostPaymentInstructions: tournament.hostPaymentInstructions,
+      socialLinks: tournament.socialLinks,
+      whatsappGroupLink: tournament.whatsappGroupLink,
+      hostVerificationType: tournament.hostVerificationType,
+      transparencyNote: tournament.transparencyNote,
+      registrationDeadline: tournament.registrationDeadline,
+    };
+
+    // Format safe date strings (YYYY-MM-DD)
+    const startDate = tournament.startDate ? tournament.startDate.split('T')[0] : new Date().toISOString().split('T')[0];
+    const regDeadline = tournament.registrationDeadline
+      ? tournament.registrationDeadline.split('T')[0]
+      : startDate;
+
     const row = {
       id: tournament.id,
-      title: tournament.title,
-      category: tournament.category,
+      title: tournament.title || 'Untitled Event',
+      category: tournament.category || 'Other',
+      format: tournament.type || tournament.teamSize || 'Open',
+      status: 'upcoming',
+      start_date: startDate,
+      end_date: tournament.endDate ? tournament.endDate.split('T')[0] : startDate,
+      time: tournament.time || 'TBD',
       city: tournament.city || 'Kathmandu',
       province: tournament.province || 'Bagmati',
-      entry_fee: tournament.entryFee || 0,
-      start_date: tournament.startDate || '',
-      host_name: tournament.hostName || '',
+      venue: tournament.location || tournament.city || 'Kathmandu, Nepal',
+      registration_deadline: regDeadline,
+      entry_fee: Number(tournament.entryFee) || 0,
+      prize_pool: tournament.prizePool || 'Trophy & Medals',
+      max_participants: Number(tournament.totalTeams) || 16,
+      current_participants: Number(tournament.registeredTeamsCount) || 0,
+      banner_url: tournament.posterUrl || null,
+      description: tournament.description || '',
+      rules: JSON.stringify(extraMetadata),
+      contact_email: tournament.hostEmail || '',
+      contact_phone: tournament.hostPhone || '',
+      organizer: tournament.hostName || tournament.hostOrg || 'Event Host',
       is_verified: Boolean(tournament.isHostVerified),
-      is_relief: Boolean(tournament.isReliefFund),
-      data: tournament, // Store full tournament structure
+      is_relief: Boolean(tournament.isReliefFund || tournament.isCharity),
+      relief_beneficiary: tournament.causeTitle || null,
     };
 
     const { error } = await supabase
@@ -151,19 +191,17 @@ export const publishCloudTournament = async (tournament: Tournament): Promise<{ 
 // 3. Increment registration count on cloud
 export const incrementCloudRegistrationCount = async (tournamentId: string): Promise<void> => {
   try {
-    // Fetch current tournament data
     const { data } = await supabase
       .from('tournaments')
-      .select('data')
+      .select('current_participants')
       .eq('id', tournamentId)
       .single();
 
-    if (data?.data) {
-      const currentData = data.data;
-      currentData.registeredTeamsCount = (currentData.registeredTeamsCount || 0) + 1;
+    if (data) {
+      const nextCount = (Number(data.current_participants) || 0) + 1;
       await supabase
         .from('tournaments')
-        .update({ data: currentData })
+        .update({ current_participants: nextCount })
         .eq('id', tournamentId);
     }
   } catch (err) {
@@ -176,14 +214,16 @@ export const saveCloudRegistration = async (reg: Registration): Promise<{ succes
   try {
     const row = {
       id: reg.id,
-      tournament_id: reg.tournamentId,
-      team_name: reg.teamName,
-      contact_phone: reg.contactPhone,
-      contact_email: reg.contactEmail,
-      confirmation_code: reg.confirmationCode,
-      payment_method: reg.paymentMethod,
-      amount: reg.entryFee || 0,
-      data: reg,
+      tournament_id: reg.tournamentId || null,
+      participant_name: reg.teamName || 'Participant',
+      team_name: reg.teamName || null,
+      contact_email: reg.contactEmail || 'participant@katatira.np',
+      contact_phone: reg.contactPhone || '9800000000',
+      status: 'confirmed',
+      pass_code: reg.confirmationCode || `KT-${Date.now().toString().slice(-4)}`,
+      payment_method: reg.paymentMethod || 'host_qr',
+      payment_reference: reg.transactionId || null,
+      amount: Number(reg.entryFee) || 0,
     };
 
     const { error } = await supabase
