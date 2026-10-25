@@ -96,6 +96,9 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [adminNoteInput, setAdminNoteInput] = useState<{ [reportId: string]: string }>({});
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmPurgeFinished, setConfirmPurgeFinished] = useState(false);
+  const [confirmClearLogs, setConfirmClearLogs] = useState(false);
 
   // Re-verify auth when opening
   useEffect(() => {
@@ -157,11 +160,15 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
   };
 
   const handleClearLogs = () => {
-    if (window.confirm('Are you sure you want to reset activity logs? This cannot be undone.')) {
-      clearAllActivityLogs();
-      loadData();
-      showNotification('Activity logs reset.');
+    if (!confirmClearLogs) {
+      setConfirmClearLogs(true);
+      setTimeout(() => setConfirmClearLogs(false), 4000);
+      return;
     }
+    clearAllActivityLogs();
+    loadData();
+    setConfirmClearLogs(false);
+    showNotification('Activity logs reset.');
   };
 
   // Load and subscribe to real-time events
@@ -851,15 +858,23 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm('Delete all concluded tournaments whose end date has passed?')) {
-                            onPurgeFinishedTournaments();
+                          if (!confirmPurgeFinished) {
+                            setConfirmPurgeFinished(true);
+                            setTimeout(() => setConfirmPurgeFinished(false), 4000);
+                            return;
                           }
+                          onPurgeFinishedTournaments();
+                          setConfirmPurgeFinished(false);
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer"
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                          confirmPurgeFinished
+                            ? 'bg-rose-600 text-white border-rose-600 animate-pulse'
+                            : 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700'
+                        }`}
                         title="Delete finished tournaments from the system"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        <span>Purge Finished ({finishedCount})</span>
+                        <span>{confirmPurgeFinished ? 'Confirm Purge Finished?' : `Purge Finished (${finishedCount})`}</span>
                       </button>
                     )}
 
@@ -867,9 +882,7 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm('Scan and delete any placeholder or test submissions (such as 3E2, ASDNAJSD)?')) {
-                            onCleanTestTournaments();
-                          }
+                          onCleanTestTournaments();
                         }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer"
                         title="Remove placeholder/test cards"
@@ -996,15 +1009,25 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (window.confirm(`Permanently delete "${t.title}" from KataTira? This action cannot be undone.`)) {
+                                  if (confirmDeleteId === t.id) {
                                     onDeleteTournament(t.id);
+                                    setConfirmDeleteId(null);
+                                  } else {
+                                    setConfirmDeleteId(t.id);
+                                    setTimeout(() => {
+                                      setConfirmDeleteId((cur) => (cur === t.id ? null : cur));
+                                    }, 4000);
                                   }
                                 }}
-                                className="inline-flex items-center gap-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2.5 py-1.5 text-xs font-bold transition-colors cursor-pointer"
-                                title="Permanently delete event"
+                                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                                  confirmDeleteId === t.id
+                                    ? 'bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 shadow-sm animate-pulse'
+                                    : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
+                                }`}
+                                title={confirmDeleteId === t.id ? 'Click again to permanently delete' : 'Permanently delete event'}
                               >
-                                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-                                <span>Delete Event</span>
+                                <Trash2 className={`h-3.5 w-3.5 ${confirmDeleteId === t.id ? 'text-white' : 'text-rose-600'}`} />
+                                <span>{confirmDeleteId === t.id ? 'Confirm Delete?' : 'Delete Event'}</span>
                               </button>
                             )}
                           </div>

@@ -25,6 +25,7 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
     const fetchPromise = supabase
       .from('tournaments')
       .select('*')
+      .neq('status', 'deleted')
       .order('created_at', { ascending: false });
 
     const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
@@ -40,7 +41,9 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
 
     if (!data || data.length === 0) return [];
 
-    return data.map((row: any) => {
+    return data
+      .filter((row: any) => row.status !== 'deleted')
+      .map((row: any) => {
       // Parse extra rich metadata packed in rules column
       let extra: Partial<Tournament> = {};
       if (row.rules && typeof row.rules === 'string' && row.rules.startsWith('{')) {
@@ -242,16 +245,20 @@ export const saveCloudRegistration = async (reg: Registration): Promise<{ succes
   }
 };
 
-// 5. Delete an event from Supabase cloud
+// 5. Delete an event from Supabase cloud (uses update status='deleted' to reliably satisfy RLS policies)
 export const deleteCloudTournament = async (tournamentId: string): Promise<boolean> => {
   try {
-    const { error } = await supabase
+    // 1. Mark status as 'deleted' (this update works reliably with Supabase anon RLS)
+    const { error: updateError } = await supabase
       .from('tournaments')
-      .delete()
+      .update({ status: 'deleted' })
       .eq('id', tournamentId);
 
-    if (error) {
-      console.warn('Failed to delete tournament from cloud:', error.message);
+    // 2. Also attempt hard delete in case RLS allows
+    await supabase.from('tournaments').delete().eq('id', tournamentId);
+
+    if (updateError) {
+      console.warn('Failed to soft-delete tournament from cloud:', updateError.message);
       return false;
     }
     return true;

@@ -361,14 +361,18 @@ export default function App() {
       try {
         const cloudTournaments = await fetchCloudTournaments();
         if (isMounted && cloudTournaments.length > 0) {
+          const savedDeleted = localStorage.getItem('katatira_deleted_ids');
+          const deletedList: string[] = savedDeleted ? JSON.parse(savedDeleted) : [];
+          const deletedSet = new Set(deletedList);
+
           setTournaments((prev) => {
             const map = new Map<string, Tournament>();
             // Keep active INITIAL_TOURNAMENTS
-            INITIAL_TOURNAMENTS.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
+            INITIAL_TOURNAMENTS.filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id)).forEach((t) => map.set(t.id, t));
             // Keep local tournaments (e.g. newly hosted in this session)
-            prev.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
+            prev.filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id)).forEach((t) => map.set(t.id, t));
             // Cloud tournaments merge & update (authoritative cloud sync)
-            cloudTournaments.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
+            cloudTournaments.filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id)).forEach((t) => map.set(t.id, t));
             return Array.from(map.values());
           });
         }
@@ -503,12 +507,23 @@ export default function App() {
   // Permanently delete a tournament from the platform (Admin & Host)
   const handleDeleteTournament = (tournamentId: string) => {
     const target = tournaments.find((t) => t.id === tournamentId);
+
+    // Save to deleted IDs in localStorage so local cache never revives it
+    try {
+      const savedDeleted = localStorage.getItem('katatira_deleted_ids');
+      const list: string[] = savedDeleted ? JSON.parse(savedDeleted) : [];
+      if (!list.includes(tournamentId)) {
+        list.push(tournamentId);
+        localStorage.setItem('katatira_deleted_ids', JSON.stringify(list));
+      }
+    } catch {}
+
     setTournaments((prev) => prev.filter((t) => t.id !== tournamentId));
     setHostedTournamentIds((prev) => prev.filter((id) => id !== tournamentId));
     setInterestedEventIds((prev) => prev.filter((id) => id !== tournamentId));
     setRegistrations((prev) => prev.filter((r) => r.tournamentId !== tournamentId));
 
-    // Delete from Supabase cloud database
+    // Delete from Supabase cloud database (sets status='deleted' and removes)
     deleteCloudTournament(tournamentId).catch(console.warn);
 
     logActivity({

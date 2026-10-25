@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Sparkles,
@@ -30,6 +30,7 @@ export const HostPortalModal: React.FC<HostPortalModalProps> = ({
   onSelectTournament,
   onDeleteTournament,
 }) => {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   if (!isOpen) return null;
 
   const totalHosted = hostedTournaments.length;
@@ -180,15 +181,25 @@ export const HostPortalModal: React.FC<HostPortalModalProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm(`Are you sure you want to delete "${t.title}"? This will permanently remove your listing from KataTira.`)) {
+                              if (confirmDeleteId === t.id) {
                                 onDeleteTournament(t.id);
+                                setConfirmDeleteId(null);
+                              } else {
+                                setConfirmDeleteId(t.id);
+                                setTimeout(() => {
+                                  setConfirmDeleteId((cur) => (cur === t.id ? null : cur));
+                                }, 4000);
                               }
                             }}
-                            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-3 py-2 text-xs font-bold text-rose-700 shadow-2xs transition-colors cursor-pointer"
-                            title="Permanently remove your tournament"
+                            className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold shadow-2xs transition-all cursor-pointer ${
+                              confirmDeleteId === t.id
+                                ? 'bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 animate-pulse'
+                                : 'border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700'
+                            }`}
+                            title={confirmDeleteId === t.id ? 'Click again to permanently delete' : 'Permanently remove your tournament'}
                           >
-                            <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-                            <span>Delete</span>
+                            <Trash2 className={`h-3.5 w-3.5 ${confirmDeleteId === t.id ? 'text-white' : 'text-rose-600'}`} />
+                            <span>{confirmDeleteId === t.id ? 'Confirm Delete?' : 'Delete'}</span>
                           </button>
                         )}
                       </div>
