@@ -87,36 +87,20 @@ const CATEGORY_TABS = [
   { id: 'Charity & Relief', label: 'Disaster Relief', icon: HeartHandshake, isRelief: true },
 ];
 
-// Helper to detect test/dummy placeholder listings (e.g. 3E2, ASDNAJSD, 23d23d)
+// Helper to detect test/dummy placeholder listings (e.g. empty or corrupt data)
 export const isTestOrPlaceholderTournament = (item: any): boolean => {
   if (!item || !item.title) return true;
-  const title = String(item.title).trim().toLowerCase();
-  const desc = String(item.description || '').trim().toLowerCase();
-  const host = String(item.hostName || '').trim().toLowerCase();
-  const loc = String(item.location || '').trim().toLowerCase();
-  const id = String(item.id || '').trim().toLowerCase();
-  const combined = `${title} ${desc} ${host} ${loc} ${id}`;
-
-  const testTokens = ['3e2', '33d3d', 'asdnajsd', '23d23d', 'dummy', 'fake', 'asdf'];
-  for (const token of testTokens) {
-    if (title === token || id.includes(token)) return true;
-    if (combined.includes(token)) return true;
-  }
-  if (title === 'test' || title === 'test tournament' || title === 'sample event') return true;
-  if (title.length < 4 && !INITIAL_TOURNAMENTS.some((it) => it.id === item.id)) {
-    return true;
-  }
   return false;
 };
 
 // Helper to determine if an event has concluded
 export const isConcludedTournament = (t: Tournament): boolean => {
-  if (t.isReliefFund || t.id === 'ev-pm-flood-relief' || t.id === 'ev-redcross-flood') {
+  if (t.isReliefFund) {
     return false; // Relief initiatives are ongoing public appeals
   }
   const dateStr = t.endDate || t.startDate || t.date;
   if (!dateStr) return false;
-  const today = '2026-10-02';
+  const today = new Date().toISOString().split('T')[0];
   return dateStr < today;
 };
 
@@ -127,11 +111,10 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEYS.TOURNAMENTS);
       if (saved) {
         const parsed: Tournament[] = JSON.parse(saved);
-        // Completely filter out fake/demo cards, placeholders, expired events
+        // Completely filter out fake/demo legacy cards
         const cleaned = parsed.filter(
           (item) =>
             !isTestOrPlaceholderTournament(item) &&
-            !isEventRegistrationEnded(item) &&
             !isDemoTournament(item)
         );
 
@@ -378,26 +361,14 @@ export default function App() {
       try {
         const cloudTournaments = await fetchCloudTournaments();
         if (isMounted && cloudTournaments.length > 0) {
-          // Identify any tournaments that have ended and remove from cloud & local
-          const expiredCloudItems = cloudTournaments.filter(isEventRegistrationEnded);
-          if (expiredCloudItems.length > 0) {
-            expiredCloudItems.forEach((exp) => {
-              deleteCloudTournament(exp.id).catch(console.warn);
-            });
-          }
-
-          const activeCloudTournaments = cloudTournaments.filter(
-            (t) => !isEventRegistrationEnded(t)
-          );
-
           setTournaments((prev) => {
             const map = new Map<string, Tournament>();
             // Keep active INITIAL_TOURNAMENTS
-            INITIAL_TOURNAMENTS.filter((t) => !isEventRegistrationEnded(t) && !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
-            // Keep local tournaments (e.g. ones just hosted in this session)
-            prev.filter((t) => !isEventRegistrationEnded(t) && !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
-            // Cloud tournaments merge & update
-            activeCloudTournaments.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
+            INITIAL_TOURNAMENTS.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
+            // Keep local tournaments (e.g. newly hosted in this session)
+            prev.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
+            // Cloud tournaments merge & update (authoritative cloud sync)
+            cloudTournaments.filter((t) => !isDemoTournament(t)).forEach((t) => map.set(t.id, t));
             return Array.from(map.values());
           });
         }
@@ -411,12 +382,12 @@ export default function App() {
     // Run initial sync after DOM is interactive to never delay window onload
     const timer = setTimeout(() => {
       syncCloudData(false);
-    }, 200);
+    }, 100);
 
-    // Seamless background polling: re-check every 25 seconds silently
+    // Seamless background polling: re-check every 15 seconds silently
     const pollInterval = setInterval(() => {
       syncCloudData(true);
-    }, 25000);
+    }, 15000);
 
     // Seamless update when user clicks back into the tab/window
     const onFocus = () => {
@@ -430,29 +401,6 @@ export default function App() {
       clearInterval(pollInterval);
       window.removeEventListener('focus', onFocus);
     };
-  }, []);
-
-  // Periodic automatic cleanup: runs every 60 seconds to automatically delete any event whose registration has ended
-  useEffect(() => {
-    const purgeExpired = () => {
-      setTournaments((prev) => {
-        const expired = prev.filter(isEventRegistrationEnded);
-        if (expired.length === 0) return prev;
-
-        // Auto-delete each expired tournament from cloud
-        expired.forEach((exp) => {
-          deleteCloudTournament(exp.id).catch(console.warn);
-        });
-
-        // Filter them out of active tournaments
-        return prev.filter((t) => !isEventRegistrationEnded(t));
-      });
-    };
-
-    // Run on mount and every 60 seconds
-    purgeExpired();
-    const interval = setInterval(purgeExpired, 60000);
-    return () => clearInterval(interval);
   }, []);
 
   const showToast = (msg: string) => {
@@ -647,12 +595,7 @@ export default function App() {
   // Filtered & Sorted Tournaments
   const filteredTournaments = useMemo(() => {
     const result = tournaments.filter((t) => {
-      // 0. Auto-exclude any event whose registration has ended
-      if (isEventRegistrationEnded(t)) {
-        return false;
-      }
-
-      // 0b. Concluded / past events filter
+      // 0. Concluded / past events filter
       if (!showConcluded && isConcludedTournament(t)) {
         return false;
       }

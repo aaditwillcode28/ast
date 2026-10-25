@@ -11,6 +11,9 @@ export const INITIAL_TOURNAMENTS: Tournament[] = [];
  * Known legacy demo / placeholder event IDs to purge from visitors' local storage caches.
  */
 export const DEMO_EVENT_IDS = new Set<string>([
+  'test-1',
+  'test-check-rules',
+  'test-sync-1',
   'ev-pm-flood-relief',
   'ev-redcross-flood',
   'ev-foot-relief-cup',

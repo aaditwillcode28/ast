@@ -53,24 +53,30 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   // Calendar Type: 'AD' (English) or 'BS' (Nepali Bikram Sambat)
   const [calendarType, setCalendarType] = useState<'AD' | 'BS'>('AD');
   
-  // AD Dates
-  const [startDate, setStartDate] = useState('2026-10-24');
-  const [endDate, setEndDate] = useState('2026-10-25');
+  // AD Dates: Default to upcoming dates (5-7 days ahead)
+  const getUpcomingDateStr = (daysAhead: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    return d.toISOString().split('T')[0];
+  };
+
+  const [startDate, setStartDate] = useState(() => getUpcomingDateStr(7));
+  const [endDate, setEndDate] = useState(() => getUpcomingDateStr(8));
   
   // BS Dates
   const [bsStartYear, setBsStartYear] = useState(2083);
   const [bsStartMonth, setBsStartMonth] = useState(7); // Kartik
-  const [bsStartDay, setBsStartDay] = useState(8);
+  const [bsStartDay, setBsStartDay] = useState(15);
   const [bsEndYear, setBsEndYear] = useState(2083);
   const [bsEndMonth, setBsEndMonth] = useState(7);
-  const [bsEndDay, setBsEndDay] = useState(9);
+  const [bsEndDay, setBsEndDay] = useState(16);
 
   const [time, setTime] = useState('09:00 AM - 05:00 PM NPT');
   const [location, setLocation] = useState('');
   const [city, setCity] = useState('Kathmandu');
   const [province, setProvince] = useState('Bagmati');
   const [stateCountry, setStateCountry] = useState('Bagmati, Nepal');
-  const [registrationDeadline, setRegistrationDeadline] = useState('');
+  const [registrationDeadline, setRegistrationDeadline] = useState(() => getUpcomingDateStr(5));
   const [activeModalTab, setActiveModalTab] = useState<'form' | 'preview'>('form');
 
   // Category selection with 'Other' option
@@ -234,14 +240,14 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
         title: title.trim(),
         category: isCharity ? 'Charity & Relief' : effectiveCategory,
         posterUrl: posterUrl,
-        startDate: calendarType === 'AD' ? startDate : '2026-10-24',
-        endDate: calendarType === 'AD' ? (endDate || startDate) : '2026-10-25',
+        startDate: startDate,
+        endDate: endDate || startDate,
         calendarType,
         bsStartDate: calendarType === 'BS' ? bsStartDateStr : convertAdToBs(startDate).bsDateStr,
         bsEndDate: calendarType === 'BS' ? bsEndDateStr : convertAdToBs(endDate || startDate).bsDateStr,
         date: startDate,
         time,
-        registrationDeadline: registrationDeadline.trim() ? registrationDeadline.trim() : undefined,
+        registrationDeadline: registrationDeadline.trim() ? registrationDeadline.trim() : (endDate || startDate),
         location: location.trim(),
         city: city.trim(),
         province: province,
