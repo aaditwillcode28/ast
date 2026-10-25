@@ -1,0 +1,17 @@
+# Allow Google and other search engines to crawl all pages, assets, and favicons
+User-agent: Google-Favicon
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: *
+Allow: /
+
+Sitemap: https://www.ast.com.np/sitemap.xml
