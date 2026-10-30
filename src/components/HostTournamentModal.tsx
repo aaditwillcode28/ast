@@ -16,18 +16,24 @@ import {
   Mail,
   ShieldCheck,
   Sparkles,
-  Clock
+  Clock,
+  RefreshCw,
+  Lock,
+  Bot
 } from 'lucide-react';
 import { Tournament, SocialLinks } from '../types';
 import { DEFAULT_POSTER_FALLBACK } from '../data/mockTournaments';
 import { normalizeTournamentType, normalizeAgeDivision, formatEventDates } from '../utils/textFormat';
 import { NEPALI_MONTHS, convertAdToBs, formatBsDate } from '../utils/nepaliCalendar';
+import { AntiBotCaptcha } from './AntiBotCaptcha';
+import { isAdminAuthenticated } from '../utils/activityTracker';
 
 interface HostTournamentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTournament: (tournament: Tournament) => void;
   initialCategory?: string;
+  isPostedByAdmin?: boolean;
 }
 
 export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
@@ -35,7 +41,9 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   onClose,
   onAddTournament,
   initialCategory,
+  isPostedByAdmin,
 }) => {
+  const [postAsAdmin, setPostAsAdmin] = useState(() => Boolean(isPostedByAdmin) || isAdminAuthenticated());
   // Form State with Nepal defaults
   const [title, setTitle] = useState('');
   const [posterUrl, setPosterUrl] = useState(DEFAULT_POSTER_FALLBACK);
@@ -127,6 +135,73 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const [website, setWebsite] = useState('');
   const [whatsappGroupLink, setWhatsappGroupLink] = useState('');
 
+  // Auto-Fill Scanner state
+  const [isAnalyzingPoster, setIsAnalyzingPoster] = useState(false);
+  const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
+  const [scanStepIndex, setScanStepIndex] = useState(0);
+  const [scanProgress, setScanProgress] = useState(15);
+  const [estSecondsLeft, setEstSecondsLeft] = useState(3);
+
+  const SCAN_STAGES = [
+    'Scanning flyer typography & title...',
+    'Detecting event dates & schedule...',
+    'Locating venue, city & Nepal province...',
+    'Extracting entry fee & prize pool...',
+    'Auto-filling tournament details...',
+  ];
+
+  useEffect(() => {
+    if (!isAnalyzingPoster) {
+      setScanStepIndex(0);
+      setScanProgress(15);
+      setEstSecondsLeft(3);
+      return;
+    }
+
+    const stepInterval = setInterval(() => {
+      setScanStepIndex((prev) => (prev + 1) % SCAN_STAGES.length);
+    }, 450);
+
+    const start = Date.now();
+    const progressInterval = setInterval(() => {
+      const elapsed = Date.now() - start;
+      if (elapsed < 600) {
+        setScanProgress(30);
+        setEstSecondsLeft(3);
+      } else if (elapsed < 1200) {
+        setScanProgress(55);
+        setEstSecondsLeft(2);
+      } else if (elapsed < 1800) {
+        setScanProgress(75);
+        setEstSecondsLeft(1);
+      } else {
+        setScanProgress(90);
+        setEstSecondsLeft(1);
+      }
+    }, 200);
+
+    return () => {
+      clearInterval(stepInterval);
+      clearInterval(progressInterval);
+    };
+  }, [isAnalyzingPoster]);
+
+  // Anti-Bot and Anti-Scam Security State
+  const [captchaData, setCaptchaData] = useState<{
+    isVerified: boolean;
+    captchaAnswer: string;
+    expectedAnswer: string;
+    honeypotValue: string;
+    timeElapsedMs: number;
+  }>({
+    isVerified: false,
+    captchaAnswer: '',
+    expectedAnswer: '',
+    honeypotValue: '',
+    timeElapsedMs: 0,
+  });
+  const [isOrganizerCertified, setIsOrganizerCertified] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -180,6 +255,197 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     });
   };
 
+  // AI Multimodal Poster Analysis (Automatic Form Population with Full Editability)
+  const analyzePosterWithAi = async (dataUrl: string) => {
+    if (!dataUrl) return;
+    setIsAnalyzingPoster(true);
+    setAiSuccessMessage(null);
+    setErrorMsg('');
+
+    try {
+      const res = await fetch('/api/analyze-poster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: dataUrl,
+          mimeType: dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Poster analysis service currently unavailable.');
+      }
+
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        throw new Error(json.error || 'Could not parse poster details.');
+      }
+
+      const d = json.data;
+      let count = 0;
+
+      // 1. Title
+      if (d.title && typeof d.title === 'string' && d.title.trim()) {
+        setTitle(d.title.trim());
+        count++;
+      }
+
+      // 2. Category
+      if (d.category && typeof d.category === 'string') {
+        const catMap: { [key: string]: string } = {
+          'football': 'Football',
+          'futsal': 'Football',
+          'soccer': 'Football',
+          'basketball': 'Basketball',
+          'mun': 'MUN & Debate',
+          'debate': 'MUN & Debate',
+          'quiz': 'Quiz',
+          'esports': 'Esports',
+          'gaming': 'Esports',
+          'case competition': 'Case Competition',
+          'hackathon': 'Other',
+          'cultural': 'Cultural',
+          'charity': 'Charity & Relief',
+          'relief': 'Charity & Relief',
+        };
+        const lower = d.category.toLowerCase();
+        let matched = '';
+        for (const [k, v] of Object.entries(catMap)) {
+          if (lower.includes(k)) {
+            matched = v;
+            break;
+          }
+        }
+        if (matched) {
+          setCategorySelect(matched);
+        } else {
+          setCategorySelect('Other');
+          setCustomCategory(d.category);
+        }
+        count++;
+      }
+
+      // 3. Format / Type
+      if (d.format && typeof d.format === 'string' && d.format.trim()) {
+        const stdFormats = ['7v7 Knockout', '5v5 Futsal', 'League & Knockout', '3v3 Basketball', 'Single Elimination', 'Group Stage + Knockout', 'Open Knockout'];
+        const found = stdFormats.find(f => f.toLowerCase().includes(d.format.toLowerCase()));
+        if (found) {
+          setFormatSelect(found);
+        } else {
+          setFormatSelect('Other');
+          setCustomFormat(d.format.trim());
+        }
+        count++;
+      }
+
+      // 4. Age Division / Eligibility
+      if (d.ageGroup && typeof d.ageGroup === 'string' && d.ageGroup.trim()) {
+        const stdAges = ['Open', 'College/University', 'High School', 'U-19', 'U-16', 'U-14'];
+        const found = stdAges.find(a => a.toLowerCase() === d.ageGroup.toLowerCase());
+        if (found) {
+          setAgeSelect(found);
+        } else {
+          setAgeSelect('Other');
+          setCustomAge(d.ageGroup.trim());
+        }
+        count++;
+      }
+
+      // 5. Venue / Location & City
+      if (d.location && typeof d.location === 'string' && d.location.trim()) {
+        setLocation(d.location.trim());
+        count++;
+      }
+      if (d.city && typeof d.city === 'string' && d.city.trim()) {
+        setCity(d.city.trim());
+        count++;
+      }
+      if (d.province && typeof d.province === 'string' && d.province.trim()) {
+        const provs = ['Bagmati', 'Gandaki', 'Koshi', 'Lumbini', 'Madhesh', 'Karnali', 'Sudurpashchim'];
+        const found = provs.find(p => p.toLowerCase().includes(d.province.toLowerCase()));
+        if (found) setProvince(found);
+      }
+
+      // 6. Calendar Type & Dates
+      if (d.calendarType === 'BS') {
+        setCalendarType('BS');
+      } else if (d.calendarType === 'AD') {
+        setCalendarType('AD');
+      }
+
+      if (d.startDate && typeof d.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.startDate)) {
+        setStartDate(d.startDate);
+        if (d.endDate && typeof d.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.endDate)) {
+          setEndDate(d.endDate);
+        } else {
+          setEndDate(d.startDate);
+        }
+        count++;
+      }
+
+      // 7. Time
+      if (d.time && typeof d.time === 'string' && d.time.trim()) {
+        setTime(d.time.trim());
+      }
+
+      // 8. Entry Fee
+      if (d.entryFee !== undefined && d.entryFee !== null) {
+        const numFee = Number(d.entryFee);
+        if (!isNaN(numFee) && numFee >= 0) {
+          setEntryFee(numFee);
+          count++;
+        }
+      }
+
+      // 9. Prize Pool
+      if (d.prizePool && typeof d.prizePool === 'string' && d.prizePool.trim()) {
+        setPrizePool(d.prizePool.trim());
+        count++;
+      }
+
+      // 10. Max Teams
+      if (d.totalTeams && Number(d.totalTeams) > 0) {
+        setTotalTeams(Number(d.totalTeams));
+      }
+
+      // 11. Host Organizers & Contact
+      if (d.hostName && typeof d.hostName === 'string' && d.hostName.trim()) {
+        setHostName(d.hostName.trim());
+        count++;
+      }
+      if (d.hostOrg && typeof d.hostOrg === 'string' && d.hostOrg.trim()) {
+        setHostOrg(d.hostOrg.trim());
+        count++;
+      }
+      if (d.hostPhone && typeof d.hostPhone === 'string' && d.hostPhone.trim()) {
+        setHostPhone(d.hostPhone.trim());
+        count++;
+      }
+      if (d.hostEmail && typeof d.hostEmail === 'string' && d.hostEmail.trim()) {
+        setHostEmail(d.hostEmail.trim());
+      }
+
+      // 12. Deadline & Description & Links
+      if (d.registrationDeadline && typeof d.registrationDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.registrationDeadline)) {
+        setRegistrationDeadline(d.registrationDeadline);
+      }
+      if (d.description && typeof d.description === 'string' && d.description.trim()) {
+        setDescription(d.description.trim());
+      }
+      if (d.officialLink && typeof d.officialLink === 'string' && d.officialLink.trim()) {
+        setOfficialLink(d.officialLink.trim());
+      }
+
+      setScanProgress(100);
+      setEstSecondsLeft(0);
+      setAiSuccessMessage(`Auto-filled ${count} fields directly from your flyer! All information is fully editable below before publishing.`);
+    } catch (err: any) {
+      console.warn('Auto-fill poster scan notice:', err);
+    } finally {
+      setIsAnalyzingPoster(false);
+    }
+  };
+
   // Handle file upload for poster/pamphlet
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -196,11 +462,15 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     }
 
     try {
-      const optimizedDataUrl = await compressImageFile(file, 1200, 0.82);
-      if (optimizedDataUrl) {
-        setCustomPosterFile(optimizedDataUrl);
-        setPosterUrl(optimizedDataUrl);
+      // 1. High-res version for preview and tournament feed (1200px)
+      const displayDataUrl = await compressImageFile(file, 1200, 0.82);
+      if (displayDataUrl) {
+        setCustomPosterFile(displayDataUrl);
+        setPosterUrl(displayDataUrl);
         setErrorMsg('');
+        // 2. Ultra-compact version for AI vision (~60KB payload, fast network transfer & rapid model tokenization)
+        const fastVisionPayload = await compressImageFile(file, 750, 0.65);
+        analyzePosterWithAi(fastVisionPayload || displayDataUrl);
       }
     } catch {
       setErrorMsg('Could not process image file. Please try another image.');
@@ -220,7 +490,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     } catch {}
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title.trim()) {
@@ -253,7 +523,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       return;
     }
 
-    // STRICT COMPULSORY PHONE CHECK
+    // STRICT COMPULSORY PHONE CHECK & NEPAL FORMAT
     if (!hostPhone.trim()) {
       setErrorMsg('Organizer contact phone number is compulsory. Please enter your mobile or WhatsApp number.');
       return;
@@ -263,9 +533,51 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       setErrorMsg('Please enter a valid mobile number (at least 8-10 digits) for tournament coordination.');
       return;
     }
+    if (digitsOnly.length === 10 && !digitsOnly.startsWith('98') && !digitsOnly.startsWith('97') && !digitsOnly.startsWith('01')) {
+      setErrorMsg('Please enter a standard Nepal phone number (starting with 98 or 97, or 01 landline).');
+      return;
+    }
+
+    // 1. Anti-Bot CAPTCHA Verification
+    if (!captchaData.isVerified) {
+      setErrorMsg('Please solve the security challenge below to verify you are a human.');
+      return;
+    }
+
+    // 2. Organizer Scam Shield Declaration
+    if (!isOrganizerCertified) {
+      setErrorMsg('Please check the Organizer Authenticity & Scam Shield certification box before publishing.');
+      return;
+    }
 
     setErrorMsg('');
     setIsSubmitting(true);
+
+    // 3. Server-Side Security & Anti-Scam Verification Check
+    try {
+      const secRes = await fetch('/api/security/verify-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          captchaAnswer: captchaData.captchaAnswer,
+          expectedAnswer: captchaData.expectedAnswer,
+          honeypot: captchaData.honeypotValue,
+          timeElapsedMs: captchaData.timeElapsedMs,
+          title: title.trim(),
+          description: description.trim(),
+          phone: hostPhone.trim(),
+        }),
+      });
+
+      const secJson = await secRes.json();
+      if (!secJson.success) {
+        setErrorMsg(secJson.message || 'Security verification failed.');
+        setIsSubmitting(false);
+        return;
+      }
+    } catch (secErr) {
+      console.warn('Security verify network notice:', secErr);
+    }
 
     setTimeout(() => {
       const socialLinks: SocialLinks = {};
@@ -299,8 +611,8 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
         isReliefFund: isCharity || effectiveCategory === 'Charity & Relief',
         totalTeams: (hasNoSlots || isCharity) ? 0 : (Number(totalTeams) || 16),
         registeredTeamsCount: 0,
-        isHostVerified: true,
-        hostVerificationType: isCharity ? 'relief_desk' : 'verified_organizer',
+        postedByAdmin: Boolean(isPostedByAdmin || postAsAdmin),
+        hostVerificationType: Boolean(isPostedByAdmin || postAsAdmin) ? 'admin' : undefined,
         hostName: hostName.trim(),
         hostOrg: hostOrg.trim() || undefined,
         hostEmail: hostEmail.trim(),
@@ -388,6 +700,85 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
             </span>
           </button>
         </div>
+
+        {/* AUTO-FILL SCANNER STATUS BANNER */}
+        {isAnalyzingPoster && (
+          <div className="mx-4 sm:mx-6 mt-4 overflow-hidden rounded-2xl bg-slate-900 border-2 border-orange-500 p-4 shadow-xl text-white animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/40">
+                  <RefreshCw className="h-5 w-5 animate-spin" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-display font-bold text-sm text-white flex items-center gap-1.5">
+                      <span>Auto-Fill Scanner</span>
+                    </h4>
+                    <span className="rounded-full bg-orange-500/20 border border-orange-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-orange-400">
+                      Scanning Flyer
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5 font-medium">
+                    <span className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+                    <span>{SCAN_STAGES[scanStepIndex]}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Real Progress Bar & Estimated Time to Finish */}
+              <div className="w-full sm:w-64 shrink-0 space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-slate-300">Loading details</span>
+                  <span className="text-orange-400 font-bold">{scanProgress}%</span>
+                </div>
+                <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700 p-0.5">
+                  <div
+                    className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${scanProgress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span>Auto-filling form</span>
+                  <span className="text-orange-300 font-bold">Est. time: ~{estSecondsLeft}s</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* HIGH-VISIBILITY SUCCESS NOTIFICATION (100% Editable) */}
+        {aiSuccessMessage && !isAnalyzingPoster && (
+          <div className="mx-4 sm:mx-6 mt-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border-2 border-emerald-500/90 p-4 shadow-xl shadow-emerald-500/25 text-white flex items-start justify-between gap-3 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-500/30 mt-0.5">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-display font-bold text-sm text-emerald-300 flex items-center gap-1.5">
+                    <span>✨ Tournament Details Auto-Filled</span>
+                  </h4>
+                  <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                    100% Editable
+                  </span>
+                </div>
+                <p className="text-xs text-slate-200 mt-1">
+                  {aiSuccessMessage}
+                </p>
+                <p className="text-[11px] text-emerald-400/90 mt-0.5">
+                  ✎ Review any pre-filled field below and freely modify dates, rules, or prizes before publishing.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiSuccessMessage(null)}
+              className="rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white transition-colors shrink-0"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Error notification */}
         {errorMsg && (
@@ -547,15 +938,17 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5">
-                    <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
-                    <div>
-                      <h5 className="font-bold text-xs text-emerald-950">Host Verification Badge Preview</h5>
-                      <p className="text-[11px] text-emerald-800 mt-0.5">
-                        Your event will be published with a <strong>Verified Organizer</strong> checkmark so players and donors immediately trust your listing.
-                      </p>
+                  {postAsAdmin ? (
+                    <div className="flex items-start gap-3 rounded-xl border border-slate-900 bg-slate-900 p-3.5 text-white">
+                      <ShieldCheck className="h-5 w-5 shrink-0 text-orange-400 mt-0.5" />
+                      <div>
+                        <h5 className="font-bold text-xs text-white">Admin Listing Status</h5>
+                        <p className="text-[11px] text-slate-300 mt-0.5">
+                          This tournament will be displayed with the <strong>"Posted by Admin"</strong> badge.
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -569,31 +962,143 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
             <div className="lg:col-span-7 space-y-5">
               {/* POSTER / FLYER UPLOAD SECTION */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                <label className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-orange-600">
-                  <span className="flex items-center gap-1.5">
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
                     <Upload className="h-4 w-4" /> Tournament Poster / Official Flyer
+                  </label>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700">
+                    <Sparkles className="h-3 w-3" /> Auto-Fill Powered
                   </span>
-                  <span className="text-[10px] text-slate-400">High Res (PNG/JPG)</span>
-                </label>
-
-                {/* Upload box */}
-                <div className="relative mt-2 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white p-5 text-center hover:border-orange-500 transition-colors">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  />
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 text-orange-600 mb-2">
-                    <ImageIcon className="h-5 w-5" />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {customPosterFile ? 'Change Uploaded Poster' : 'Click or Drag & Drop Event Flyer / Poster'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Upload official flyer or tournament banner (PNG, JPG up to 8MB)
-                  </p>
                 </div>
+
+                {/* When scanning: HIGH-CONTRAST LASER SCANNER HUD */}
+                {isAnalyzingPoster ? (
+                  <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-orange-500 bg-slate-950 p-6 text-center text-white overflow-hidden shadow-2xl shadow-orange-500/30 min-h-[220px]">
+                    {/* Laser Scanner Line traversing vertically */}
+                    <div className="absolute left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-orange-400 to-transparent shadow-[0_0_25px_#f97316] animate-scanner-beam pointer-events-none z-20" />
+                    
+                    {/* Background poster image with scanner grid overlay */}
+                    {(customPosterFile || (posterUrl && posterUrl !== DEFAULT_POSTER_FALLBACK)) && (
+                      <div className="absolute inset-0 z-0">
+                        <img
+                          src={customPosterFile || posterUrl}
+                          alt="Poster Scanning"
+                          className="h-full w-full object-cover opacity-25 filter blur-[1px]"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/40 to-slate-950/90" />
+                      </div>
+                    )}
+
+                    {/* Scanner Foreground Content */}
+                    <div className="relative z-10 flex flex-col items-center justify-center space-y-3.5 max-w-sm w-full">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/40">
+                        <RefreshCw className="h-6 w-6 animate-spin" />
+                      </div>
+
+                      <div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-0.5 text-[11px] font-mono font-bold text-orange-300">
+                          Auto-Fill Scanner
+                        </span>
+                        <h4 className="font-display font-black text-lg text-white mt-1.5 tracking-tight">
+                          Scanning Flyer...
+                        </h4>
+                        <p className="text-xs font-mono font-medium text-orange-300 mt-1">
+                          {SCAN_STAGES[scanStepIndex]}
+                        </p>
+                      </div>
+
+                      {/* Dynamic Loading Bar & Estimated Time */}
+                      <div className="w-full space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
+                          <span>Reading flyer</span>
+                          <span className="text-orange-400 font-bold">{scanProgress}%</span>
+                        </div>
+                        <div className="w-full bg-slate-900 border border-slate-700 rounded-full h-3 overflow-hidden shadow-inner p-0.5">
+                          <div
+                            className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full transition-all duration-300 ease-out"
+                            style={{ width: `${scanProgress}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                          <span>Auto-fill in progress</span>
+                          <span className="text-orange-300 font-bold">Est. time to finish: ~{estSecondsLeft}s</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : customPosterFile ? (
+                  /* When poster uploaded and not scanning: High-contrast preview box with prominent Re-scan button */
+                  <div className="relative mt-2 rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                      <div className="relative h-28 w-24 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-xs">
+                        <img
+                          src={customPosterFile}
+                          alt="Uploaded Flyer"
+                          className="h-full w-full object-cover"
+                        />
+                        <div className="absolute top-1 right-1 rounded-md bg-emerald-500 p-0.5 text-white">
+                          <CheckCircle className="h-3 w-3" />
+                        </div>
+                      </div>
+
+                      <div className="flex-1 text-center sm:text-left space-y-2">
+                        <div className="flex items-center justify-center sm:justify-start gap-1.5">
+                          <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5">
+                            Flyer Ready
+                          </span>
+                          <span className="text-xs text-slate-500">Auto-read applied</span>
+                        </div>
+                        <p className="text-xs text-slate-600">
+                          Flyer uploaded. All fields below are auto-filled and can be edited anytime.
+                        </p>
+
+                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => analyzePosterWithAi(customPosterFile)}
+                            className="flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95 cursor-pointer"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            <span>Scan Flyer to Auto-Fill</span>
+                          </button>
+
+                          <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer">
+                            <Upload className="h-3.5 w-3.5" />
+                            <span>Change Flyer</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Initial upload drop box */
+                  <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-orange-300 bg-orange-50/40 p-6 text-center hover:border-orange-500 hover:bg-orange-50/80 transition-all cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-md shadow-orange-500/30 mb-2.5">
+                      <Upload className="h-6 w-6" />
+                    </div>
+                    <p className="text-sm font-bold text-slate-900">
+                      Upload Tournament Flyer / Poster
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                      Upload official flyer (PNG, JPG) — auto-fill scanner reads title, dates, venue, entry fee & prizes!
+                    </p>
+                    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white border border-orange-200 px-3 py-1 text-[11px] font-bold text-orange-600 shadow-2xs">
+                      <RefreshCw className="h-3.5 w-3.5" /> Auto-Fill Scanner Enabled
+                    </span>
+                  </div>
+                )}
 
                 {/* Or enter Direct Flyer Image URL */}
                 <div className="mt-3">
@@ -605,20 +1110,22 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       type="url"
                       value={posterUrlInput}
                       onChange={(e) => setPosterUrlInput(e.target.value)}
-                      placeholder="https://images.unsplash.com/... or cloud image link"
+                      placeholder="https://images.unsplash.com/... or image link"
                       className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => {
                         if (posterUrlInput.trim()) {
-                          setPosterUrl(posterUrlInput.trim());
+                          const url = posterUrlInput.trim();
+                          setPosterUrl(url);
                           setCustomPosterFile(null);
+                          analyzePosterWithAi(url);
                         }
                       }}
                       className="rounded-xl bg-slate-800 hover:bg-slate-900 px-3 py-2 text-xs font-bold text-white transition-colors"
                     >
-                      Apply
+                      Apply & Scan
                     </button>
                   </div>
                 </div>
@@ -1534,6 +2041,77 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
             </div>
           </div>
 
+          {/* Admin Posting Option (Active only when authenticated as admin) */}
+          {(isAdminAuthenticated() || isPostedByAdmin) && (
+            <div className="rounded-2xl border-2 border-slate-900 bg-slate-900 text-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+              <label className="flex items-start sm:items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={postAsAdmin}
+                  onChange={(e) => setPostAsAdmin(e.target.checked)}
+                  className="h-5 w-5 mt-0.5 sm:mt-0 rounded border-slate-700 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-bold text-sm text-white flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-orange-400" />
+                    <span>Publish with "Posted by Admin" Badge</span>
+                  </span>
+                  <span className="text-xs text-slate-400 block mt-0.5">
+                    Admin session authenticated. When checked, this event will show the official "Posted by Admin" badge.
+                  </span>
+                </div>
+              </label>
+              <span className="self-start sm:self-center px-2.5 py-1 rounded-full bg-orange-500 text-white text-[11px] font-mono font-bold shrink-0">
+                Admin Session Active
+              </span>
+            </div>
+          )}
+
+          {/* Anti-Bot Verification & Organizer Authenticity Shield */}
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <span>Anti-Bot Verification & Organizer Authenticity</span>
+            </div>
+
+            {/* Anti-Bot CAPTCHA Component */}
+            <AntiBotCaptcha
+              onVerify={(data) => {
+                setCaptchaData(data);
+              }}
+            />
+
+            {/* Organizer Scam Shield Declaration */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 transition-all">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  required
+                  checked={isOrganizerCertified}
+                  onChange={(e) => setIsOrganizerCertified(e.target.checked)}
+                  className="h-5 w-5 mt-0.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div className="text-xs text-slate-700 leading-relaxed">
+                  <span className="font-bold text-slate-900 block flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                    Organizer Authenticity & Anti-Scam Shield Certification
+                  </span>
+                  <span className="text-[11px] text-slate-600 block mt-1">
+                    I solemnly certify that I am the verified organizer or authorized committee member of this event in Nepal. All venue locations, tournament dates, entry fees, and prize amounts listed are genuine. I understand that posting fake events, unauthorized fee collection, or impersonation is strictly prohibited and subject to immediate blacklisting and reporting to the Nepal Police Cyber Bureau.
+                  </span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Form Action Error Notice right above Submit */}
+          {errorMsg && (
+            <div className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-700 animate-shake">
+              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           {/* Footer Submit Actions */}
           <div className="border-t border-slate-200 pt-4 flex items-center justify-end gap-3">
             <button
@@ -1546,13 +2124,13 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all active:scale-95 disabled:opacity-60 cursor-pointer"
+              disabled={isSubmitting || !captchaData.isVerified || !isOrganizerCertified}
+              className="flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (
                 <>
                   <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Publishing Event...</span>
+                  <span>Verifying & Publishing...</span>
                 </>
               ) : (
                 <>

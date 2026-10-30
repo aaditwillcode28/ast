@@ -1410,6 +1410,7 @@ export default function App() {
           onDeleteTournament={handleDeleteTournament}
           onPurgeFinishedTournaments={handlePurgeFinishedTournaments}
           onCleanTestTournaments={handleCleanTestTournaments}
+          onOpenHostModal={() => setIsHostModalOpen(true)}
         />
       )}
 

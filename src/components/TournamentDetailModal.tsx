@@ -614,7 +614,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                   <span>Trust & Direct Organizer Payment Disclaimer</span>
                 </div>
                 <p className="text-[11px] text-amber-800 leading-relaxed">
-                  KataTira is a community tournament discovery hub in Nepal. We do not hold registration fees in escrow; all payments are transacted directly to the verified organizer. Always verify tournament schedule and match venue directly with the host before travelling.
+                  KataTira is a community tournament discovery hub in Nepal. We do not hold registration fees in escrow; all payments are transacted directly to the organizer. Always verify tournament schedule and match venue directly with the host before travelling.
                 </p>
               </div>
 

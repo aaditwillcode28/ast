@@ -72,11 +72,12 @@ export interface Tournament {
   // Social media & links
   socialLinks?: SocialLinks;
   whatsappGroupLink?: string; // Official WhatsApp group invite link from host
-  isHostVerified?: boolean; // Verified with OTP sent to host email
-  hostVerificationType?: 'government' | 'relief_desk' | 'verified_association' | 'verified_organizer';
+  isHostVerified?: boolean;
+  hostVerificationType?: 'admin' | 'government' | 'relief_desk' | 'verified_association' | 'verified_organizer';
   transparencyNote?: string; // Clear breakdown of direct fund flows & banking channels
   province?: 'Koshi' | 'Madhesh' | 'Bagmati' | 'Gandaki' | 'Lumbini' | 'Karnali' | 'Sudurpashchim' | string;
   registrationDeadline?: string; // ISO date string (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)
+  postedByAdmin?: boolean; // Display "Posted by Admin" badge only if posted by admin
   
   createdAt: string;
 }

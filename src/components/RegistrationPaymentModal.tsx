@@ -486,6 +486,19 @@ export const RegistrationPaymentModal: React.FC<RegistrationPaymentModalProps> =
                 </div>
               </div>
 
+              {/* KataTira Anti-Scam Shield Notice */}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950 flex items-start gap-2.5">
+                <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-bold text-emerald-900 block flex items-center gap-1.5">
+                    KataTira Anti-Scam Shield Active
+                  </span>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    Organizer phone (<strong>{tournament.hostPhone || hostPaymentNumber}</strong>) is verified on KataTira. Always put your squad name <strong>"{teamName}"</strong> in the remarks. If an organizer requests unrelated accounts or seems suspicious, notify us immediately.
+                  </p>
+                </div>
+              </div>
+
               {/* Total Summary */}
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 flex items-center justify-between text-xs">
                 <div>

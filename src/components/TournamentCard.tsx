@@ -61,67 +61,28 @@ const getCategoryIcon = (category: string) => {
 };
 
 /**
- * Returns verification badge styling and label according to verification type or organization
+ * Returns badge only if tournament is posted by admin.
+ * Nothing else if posted by anybody else.
  */
 export const getHostVerificationBadge = (tournament: Tournament) => {
   if (
-    tournament.hostVerificationType === 'government' ||
-    tournament.id === 'ev-pm-flood-relief' ||
-    tournament.hostOrg?.toLowerCase().includes('government of nepal') ||
-    tournament.title.toLowerCase().includes('prime minister')
+    tournament.postedByAdmin ||
+    tournament.hostVerificationType === 'admin' ||
+    tournament.hostName?.toLowerCase() === 'admin' ||
+    tournament.hostOrg?.toLowerCase() === 'admin' ||
+    tournament.hostOrg?.toLowerCase() === 'katatira admin'
   ) {
     return {
-      label: 'Official Government Desk',
-      icon: Landmark,
-      bg: 'bg-blue-600',
-      border: 'border-blue-400/50',
-      text: 'text-white',
-      tooltip: 'Official Government of Nepal national desk',
-    };
-  }
-
-  if (
-    tournament.hostVerificationType === 'relief_desk' ||
-    tournament.id === 'ev-redcross-flood' ||
-    tournament.hostOrg?.toLowerCase().includes('red cross')
-  ) {
-    return {
-      label: 'Verified Relief Desk',
-      icon: HeartHandshake,
-      bg: 'bg-rose-600',
-      border: 'border-rose-400/50',
-      text: 'text-white',
-      tooltip: 'Authorized national humanitarian disaster relief desk',
-    };
-  }
-
-  if (
-    tournament.hostVerificationType === 'verified_association' ||
-    tournament.hostOrg?.toLowerCase().includes('association') ||
-    tournament.hostOrg?.toLowerCase().includes('neba') ||
-    tournament.hostOrg?.toLowerCase().includes('nesa')
-  ) {
-    return {
-      label: 'Verified Association',
-      icon: Building,
-      bg: 'bg-purple-600',
-      border: 'border-purple-400/50',
-      text: 'text-white',
-      tooltip: 'Recognized sporting or academic association in Nepal',
-    };
-  }
-
-  if (tournament.isHostVerified) {
-    return {
-      label: 'Verified Organizer',
+      label: 'Posted by Admin',
       icon: ShieldCheck,
-      bg: 'bg-emerald-600',
-      border: 'border-emerald-400/50',
+      bg: 'bg-slate-900',
+      border: 'border-orange-500/80',
       text: 'text-white',
-      tooltip: 'Verified Organizer: Identity and contact confirmed',
+      tooltip: 'Official listing posted directly by KataTira Admin',
     };
   }
 
+  // Nothing else if posted by anybody else
   return null;
 };
 

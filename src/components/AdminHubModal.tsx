@@ -59,6 +59,7 @@ interface AdminHubModalProps {
   onDeleteTournament?: (tournamentId: string) => void;
   onPurgeFinishedTournaments?: () => void;
   onCleanTestTournaments?: () => void;
+  onOpenHostModal?: () => void;
 }
 
 export const AdminHubModal: React.FC<AdminHubModalProps> = ({
@@ -71,6 +72,7 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
   onDeleteTournament,
   onPurgeFinishedTournaments,
   onCleanTestTournaments,
+  onOpenHostModal,
 }) => {
   const [activeTab, setActiveTab] = useState<'activity' | 'tournaments' | 'registrations' | 'reports' | 'organizers' | 'settings'>('activity');
   const [eventFilter, setEventFilter] = useState<'all' | 'active' | 'finished' | 'relief'>('all');
@@ -854,6 +856,21 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
 
                   {/* Batch actions */}
                   <div className="flex items-center gap-2 flex-wrap">
+                    {onOpenHostModal && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenHostModal();
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors cursor-pointer"
+                        title="Create a tournament posted by admin"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <span>+ Post as Admin</span>
+                      </button>
+                    )}
+
                     {onPurgeFinishedTournaments && (
                       <button
                         type="button"
