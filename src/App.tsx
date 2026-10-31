@@ -248,6 +248,7 @@ export default function App() {
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [isAdminAuth, setIsAdminAuth] = useState(() => isAdminAuthenticated());
   const [pendingReportsCount, setPendingReportsCount] = useState(0);
+  const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [activeView, setActiveView] = useState<'explore' | 'passes' | 'hosted'>('explore');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hostModalCategory, setHostModalCategory] = useState<string | undefined>(undefined);
@@ -537,6 +538,37 @@ export default function App() {
     });
 
     showToast(`"${newTournament.title}" is now published live on KataTira!`);
+  };
+
+  // Update existing tournament handler (Admin edit feature)
+  const handleUpdateTournament = (updatedTournament: Tournament) => {
+    setTournaments((prev) =>
+      prev.map((t) => (t.id === updatedTournament.id ? updatedTournament : t))
+    );
+
+    // If modal currently views this tournament, update it
+    setSelectedTournamentDetail((prev) =>
+      prev && prev.id === updatedTournament.id ? updatedTournament : prev
+    );
+
+    // Sync updated data to cloud database
+    publishCloudTournament(updatedTournament).catch((err) => {
+      console.warn('Could not sync updated tournament to cloud:', err);
+    });
+
+    // Log admin activity
+    logActivity({
+      type: 'tournament_update',
+      actor: 'Administrator',
+      action: 'Updated tournament information',
+      targetTitle: updatedTournament.title,
+      targetId: updatedTournament.id,
+      details: `Category: ${updatedTournament.category} | Fee: Rs. ${updatedTournament.entryFee} | City: ${updatedTournament.city}`,
+      location: `${updatedTournament.city}, Nepal`,
+      severity: 'info',
+    });
+
+    showToast(`"${updatedTournament.title}" updated successfully!`);
   };
 
   // Handle registration success handler
@@ -1051,7 +1083,7 @@ export default function App() {
                     rel="noreferrer"
                     className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all shrink-0"
                   >
-                    <span>Official Portal</span>
+                    <span>Relief Portal</span>
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
@@ -1342,6 +1374,11 @@ export default function App() {
           isInterested={interestedEventIds.includes(selectedTournamentDetail.id)}
           onClose={() => setSelectedTournamentDetail(null)}
           onToggleInterest={handleToggleInterest}
+          onEditTournament={(t) => {
+            setSelectedTournamentDetail(null);
+            setEditingTournament(t);
+            setIsHostModalOpen(true);
+          }}
           onRegister={(t) => {
             setSelectedTournamentDetail(null);
             setSelectedTournamentRegister(t);
@@ -1354,11 +1391,14 @@ export default function App() {
         <HostTournamentModal
           isOpen={isHostModalOpen}
           initialCategory={hostModalCategory}
+          tournamentToEdit={editingTournament}
           onClose={() => {
             setIsHostModalOpen(false);
             setHostModalCategory(undefined);
+            setEditingTournament(null);
           }}
           onAddTournament={handleAddTournament}
+          onUpdateTournament={handleUpdateTournament}
         />
       )}
 
@@ -1392,7 +1432,10 @@ export default function App() {
           onClose={() => setIsHostPortalOpen(false)}
           hostedTournaments={userHostedTournaments}
           allRegistrations={registrations}
-          onOpenHostModal={() => setIsHostModalOpen(true)}
+          onOpenHostModal={() => {
+            setEditingTournament(null);
+            setIsHostModalOpen(true);
+          }}
           onSelectTournament={(t) => setSelectedTournamentDetail(t)}
           onDeleteTournament={handleDeleteTournament}
         />
@@ -1410,7 +1453,15 @@ export default function App() {
           onDeleteTournament={handleDeleteTournament}
           onPurgeFinishedTournaments={handlePurgeFinishedTournaments}
           onCleanTestTournaments={handleCleanTestTournaments}
-          onOpenHostModal={() => setIsHostModalOpen(true)}
+          onOpenHostModal={() => {
+            setEditingTournament(null);
+            setIsHostModalOpen(true);
+          }}
+          onEditTournament={(t) => {
+            setIsAdminHubOpen(false);
+            setEditingTournament(t);
+            setIsHostModalOpen(true);
+          }}
         />
       )}
 
@@ -1432,7 +1483,7 @@ export default function App() {
               <span className="text-slate-700 font-semibold">Competitions & Relief Hub of Nepal</span>
             </div>
             <p className="text-slate-500 text-[11px] max-w-lg leading-relaxed">
-              Nepal's official open tournament discovery platform. KataTira connects athletes, students, and clubs directly with verified event organizers.
+              Nepal's open tournament discovery platform. KataTira connects athletes, students, and clubs directly with event organizers.
             </p>
           </div>
 

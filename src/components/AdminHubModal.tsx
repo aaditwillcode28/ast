@@ -31,7 +31,8 @@ import {
   Trash2,
   Calendar,
   Trophy,
-  ShieldAlert
+  ShieldAlert,
+  Edit3
 } from 'lucide-react';
 import { ActivityLog, EventReport, OrganizerProfile, Registration, Tournament } from '../types';
 import {
@@ -60,6 +61,7 @@ interface AdminHubModalProps {
   onPurgeFinishedTournaments?: () => void;
   onCleanTestTournaments?: () => void;
   onOpenHostModal?: () => void;
+  onEditTournament?: (tournament: Tournament) => void;
 }
 
 export const AdminHubModal: React.FC<AdminHubModalProps> = ({
@@ -73,6 +75,7 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
   onPurgeFinishedTournaments,
   onCleanTestTournaments,
   onOpenHostModal,
+  onEditTournament,
 }) => {
   const [activeTab, setActiveTab] = useState<'activity' | 'tournaments' | 'registrations' | 'reports' | 'organizers' | 'settings'>('activity');
   const [eventFilter, setEventFilter] = useState<'all' | 'active' | 'finished' | 'relief'>('all');
@@ -1000,12 +1003,27 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
                                 {t.title}
                               </h4>
                               <p className="text-xs text-slate-500 line-clamp-1">
-                                Organizer: <strong className="text-slate-700">{t.hostName}</strong> ({t.hostPhone}) • {t.entryFee === 0 ? 'FREE' : `Rs. ${t.entryFee.toLocaleString()}`}
+                                Organizer: <strong className="text-slate-700">{t.hostOrg || 'Event Organization'}</strong> ({t.hostPhone}) • {t.entryFee === 0 ? 'FREE' : `Rs. ${t.entryFee.toLocaleString()}`}
                               </p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            {onEditTournament && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onClose();
+                                  onEditTournament(t);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                                title="Edit tournament details"
+                              >
+                                <Edit3 className="h-3.5 w-3.5 text-orange-500" />
+                                <span>Edit</span>
+                              </button>
+                            )}
+
                             {onToggleTournamentVerification && (
                               <button
                                 type="button"

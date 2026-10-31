@@ -78,7 +78,7 @@ export const getHostVerificationBadge = (tournament: Tournament) => {
       bg: 'bg-slate-900',
       border: 'border-orange-500/80',
       text: 'text-white',
-      tooltip: 'Official listing posted directly by KataTira Admin',
+      tooltip: 'Listing posted directly by KataTira Admin',
     };
   }
 
@@ -254,7 +254,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 backdrop-blur-[2px]">
           <span className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-bold text-slate-900 shadow-xl hover:bg-orange-500 hover:text-white transition-all">
             <Eye className="h-4 w-4" />
-            <span>View Full Details & Official Link</span>
+            <span>View Full Details & Event Link</span>
           </span>
         </div>
 
@@ -274,7 +274,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
           </a>
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-xs text-slate-300 line-clamp-1 font-medium">
-              By {tournament.hostOrg || tournament.hostName}
+              By {tournament.hostOrg || 'Event Organization'}
             </p>
             {/* Host Verification Badge */}
             {verificationBadge && (

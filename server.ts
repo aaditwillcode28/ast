@@ -44,41 +44,33 @@ async function startServer() {
       // Strip potential data URL prefix if sent
       const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
 
-      const systemInstruction = `
-You are an expert tournament poster analyst for KataTira, Nepal's premier open sports, competition, and event platform.
-Your task is to analyze the uploaded event pamphlet/poster image and extract all tournament details into a clean JSON object.
-
-Extract and normalize these fields accurately:
-- title: string (Exact title of the competition, cup, or event)
-- category: string (Must be one of: "Football", "Futsal", "Basketball", "Cricket", "Badminton", "Chess", "Esports", "MUN", "Debate", "Quiz", "Hackathon", "Marathon", "Charity & Relief", "Other")
-- format: string (e.g., "7v7 Knockout", "5v5 Futsal", "League", "Group + Knockout", "3v3 Basketball", "Single Elimination", "Hackathon", "Debate")
-- ageGroup: string (e.g., "Open", "U-16", "U-18", "U-19", "College/University", "Corporate", "Veterans (35+)")
-- location: string (Venue / ground / court name, e.g., "Dhuku Futsal Hub", "Dasharath Stadium Ground", "St. Xavier's College Hall")
-- city: string (City in Nepal, e.g., "Kathmandu", "Lalitpur", "Bhaktapur", "Pokhara", "Dharan", "Biratnagar", "Butwal", "Chitwan")
-- province: string (Must be one of: "Bagmati", "Gandaki", "Koshi", "Lumbini", "Madhesh", "Karnali", "Sudurpashchim")
-- calendarType: "AD" | "BS" (Detect whether dates on poster are Nepali Bikram Sambat like Baishakh/Jestha/Kartik or English AD)
-- startDate: string (YYYY-MM-DD format in AD; if given in BS or relative, convert or provide approximate Gregorian date)
-- endDate: string (YYYY-MM-DD in AD; default to startDate if single-day event)
-- bsStartDate: string (e.g. "2083-07-15" or text representation if mentioned in Bikram Sambat)
-- bsEndDate: string
-- time: string (e.g. "08:00 AM Onwards", "09:00 AM - 05:00 PM NPT")
-- entryFee: number (Numeric fee in Nepali Rupees (NPR). If free, return 0. E.g. "Rs. 3000" -> 3000)
-- prizePool: string (Detailed prizes, cash pool, trophies, certificates, e.g. "Rs. 50,000 Cash + Trophy & Medals")
-- totalTeams: number (Maximum teams/participants slots if specified, e.g. 16, 24, 32. Default 16)
-- hostName: string (Lead organizer or contact person name)
-- hostOrg: string (Organizing club, academy, committee, youth club, or college)
-- hostPhone: string (Nepali contact phone number, e.g., "98XXXXXXXX" or "97XXXXXXXX")
-- hostEmail: string (Official email if present on poster)
-- hostPaymentMethod: string ("Fonepay QR" | "eSewa" | "Khalti" | "Bank Transfer")
-- hostPaymentNumber: string (Payment phone/ID if mentioned)
-- registrationDeadline: string (YYYY-MM-DD deadline if specified)
-- description: string (Short concise summary of rules, awards, equipment requirements, or key highlights)
-- audienceAdmission: string (e.g., "Free for spectators", "Tickets: Rs. 100", etc.)
-- officialLink: string (Social link, registration link, or website if printed)
-
-Be tolerant and intelligent. If a field is not discernible from the poster, return an empty string or standard default rather than null.
-Reply ONLY with a valid JSON object matching these fields.
-`;
+      const systemInstruction = `You are a high-speed tournament poster data extractor for KataTira Nepal.
+Extract the visible text from the event flyer into a JSON object matching this schema:
+{
+  "title": string,
+  "category": "Football" | "Futsal" | "Basketball" | "Cricket" | "Badminton" | "Chess" | "Esports" | "MUN" | "Debate" | "Quiz" | "Hackathon" | "Marathon" | "Charity & Relief" | "Other",
+  "format": string,
+  "ageGroup": string,
+  "location": string,
+  "city": string,
+  "province": "Bagmati" | "Gandaki" | "Koshi" | "Lumbini" | "Madhesh" | "Karnali" | "Sudurpashchim",
+  "calendarType": "AD" | "BS",
+  "startDate": "YYYY-MM-DD",
+  "endDate": "YYYY-MM-DD",
+  "time": string,
+  "entryFee": number,
+  "prizePool": string,
+  "totalTeams": number,
+  "hostName": string,
+  "hostOrg": string,
+  "hostPhone": string,
+  "hostPhoneSecondary": string,
+  "hostEmail": string,
+  "registrationDeadline": string,
+  "description": string,
+  "officialLink": string
+}
+Return only valid JSON. Do not include markdown codeblocks or conversational text.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -93,7 +85,7 @@ Reply ONLY with a valid JSON object matching these fields.
                 },
               },
               {
-                text: 'Extract all tournament and competition parameters from this poster image. Format response as JSON according to system instructions.',
+                text: 'Extract all competition details from this poster into JSON.',
               },
             ],
           },

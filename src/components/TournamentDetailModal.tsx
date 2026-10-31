@@ -30,11 +30,12 @@ import {
   Download,
   Landmark,
   Building,
-  Check
+  Check,
+  Edit3
 } from 'lucide-react';
 import { Tournament } from '../types';
 import { formatEventDates } from '../utils/textFormat';
-import { submitEventReport } from '../utils/activityTracker';
+import { submitEventReport, isAdminAuthenticated } from '../utils/activityTracker';
 import { getGoogleCalendarUrl, downloadIcsFile, getWhatsAppShareUrl, shareTournament } from '../utils/calendarAndShare';
 import { getHostVerificationBadge } from './TournamentCard';
 import { RegistrationCountdown } from './RegistrationCountdown';
@@ -46,6 +47,7 @@ interface TournamentDetailModalProps {
   onClose: () => void;
   onRegister: (tournament: Tournament) => void;
   onToggleInterest?: (tournamentId: string) => void;
+  onEditTournament?: (tournament: Tournament) => void;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -77,6 +79,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
   onClose,
   onRegister,
   onToggleInterest,
+  onEditTournament,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeTab, setActiveTab] = useState<'poster' | 'details'>('poster');
@@ -186,6 +189,21 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onEditTournament && isAdminAuthenticated() && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEditTournament(tournament);
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800 px-2.5 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                title="Edit this tournament"
+              >
+                <Edit3 className="h-3.5 w-3.5 text-orange-600" />
+                <span>Edit Event</span>
+              </button>
+            )}
+
             {onToggleInterest && (
               <button
                 onClick={() => onToggleInterest(tournament.id)}
@@ -275,7 +293,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                   {/* Overlay text */}
                   <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
                     <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-500 px-3 py-1 text-xs font-bold text-white uppercase tracking-wider mb-2">
-                      Official Tournament Poster
+                      Tournament Poster
                     </div>
                     <h1 className="font-display text-2xl sm:text-4xl font-extrabold text-white">
                       {tournament.title}
@@ -295,7 +313,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                   <div className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-extrabold text-white">
                       <HeartHandshake className="h-4 w-4" />
-                      <span>Official Flood Relief Initiative</span>
+                      <span>Flood Relief Initiative</span>
                     </span>
                     {tournament.officialLink && (
                       <a
@@ -304,7 +322,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 hover:text-rose-900 hover:underline"
                       >
-                        <span>Official Portal</span>
+                        <span>Event Portal</span>
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     )}
@@ -332,7 +350,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                       rel="noreferrer"
                       className="inline-flex items-center justify-center gap-2 w-full rounded-xl bg-rose-600 hover:bg-rose-700 py-2.5 px-4 text-xs font-bold text-white shadow-sm transition-all"
                     >
-                      <span>Donate Directly via Official Relief Portal</span>
+                      <span>Donate Directly to Relief Fund</span>
                       <ExternalLink className="h-4 w-4" />
                     </a>
                   )}
@@ -541,7 +559,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                         className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-orange-600 shadow-xs"
                       >
                         <Globe className="h-3.5 w-3.5" />
-                        <span>Official Website</span>
+                        <span>Website</span>
                       </a>
                     )}
                   </div>
@@ -618,15 +636,17 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 </p>
               </div>
 
-              {/* Host Contact Card */}
+              {/* Host Contact Card (Only Organization and Contact Phone Numbers shown publicly) */}
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
-                  Organizer & Host Contact Information
+                  Organizer & Host Coordination
                 </h4>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h5 className="text-base font-bold text-slate-900">{tournament.hostName}</h5>
+                      <h5 className="text-base font-bold text-slate-900">
+                        {tournament.hostOrg || 'Event Organization'}
+                      </h5>
                       {(() => {
                         const badge = getHostVerificationBadge(tournament);
                         if (!badge) return null;
@@ -642,19 +662,22 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                         );
                       })()}
                     </div>
-                    {tournament.hostOrg && (
-                      <p className="text-xs font-semibold text-orange-600">{tournament.hostOrg}</p>
-                    )}
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Direct contact channel for squad registration and match day coordination.
+                    </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700">
-                    <div className="flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-sm">
-                      <Mail className="h-3.5 w-3.5 text-slate-400" />
-                      <span>{tournament.hostEmail}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-700">
+                    <div className="flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-2xs">
                       <Phone className="h-3.5 w-3.5 text-emerald-600" />
                       <span className="font-semibold">{tournament.hostPhone}</span>
                     </div>
+                    {(tournament.hostPhoneSecondary || tournament.secondaryPhone) && (
+                      <div className="flex items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-3 py-1.5 shadow-2xs">
+                        <Phone className="h-3.5 w-3.5 text-blue-600" />
+                        <span className="font-semibold">{tournament.hostPhoneSecondary || tournament.secondaryPhone}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">(Alt)</span>
+                      </div>
+                    )}
                     {tournament.whatsappGroupLink && (
                       <a
                         href={tournament.whatsappGroupLink}
@@ -663,7 +686,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 shadow-xs transition-colors"
                       >
                         <MessageCircle className="h-3.5 w-3.5" />
-                        <span>Join Host WhatsApp Group</span>
+                        <span>Join WhatsApp Group</span>
                       </a>
                     )}
                   </div>
@@ -691,7 +714,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
             <div className="h-8 w-px bg-slate-200 hidden sm:block" />
             <div className="hidden sm:block text-xs text-slate-500">
               <span className="font-semibold text-slate-700">
-                {isNoSlotsEvent ? 'Official Relief Campaign' : `${tournament.type} Tournament`}
+                {isNoSlotsEvent ? 'Relief Campaign' : `${tournament.type} Tournament`}
               </span>
               <span className="block text-[11px] text-emerald-600 font-medium">
                 {isNoSlotsEvent ? '100% Direct to Beneficiaries' : 'Zero Platform Extra Fees'}
@@ -707,7 +730,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-800 hover:text-orange-600 hover:border-orange-300 transition-colors shadow-2xs"
               >
-                <span>{isNoSlotsEvent ? 'Official Relief Portal' : 'Official Link'}</span>
+                <span>{isNoSlotsEvent ? 'Relief Portal' : 'Event Link'}</span>
                 <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
               </a>
             )}

@@ -51,6 +51,8 @@ export interface Tournament {
   hostName: string;
   hostEmail: string;
   hostPhone: string;
+  hostPhoneSecondary?: string;
+  secondaryPhone?: string;
   hostOrg?: string;
   description?: string;
   audienceAdmission?: string;
@@ -140,6 +142,7 @@ export type ActivityActionType =
   | 'search'
   | 'pass_download'
   | 'organizer_verify'
+  | 'tournament_update'
   | 'tournament_delete'
   | 'batch_purge';
 

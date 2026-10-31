@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Upload,
@@ -32,6 +32,8 @@ interface HostTournamentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTournament: (tournament: Tournament) => void;
+  onUpdateTournament?: (tournament: Tournament) => void;
+  tournamentToEdit?: Tournament | null;
   initialCategory?: string;
   isPostedByAdmin?: boolean;
 }
@@ -40,6 +42,8 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   isOpen,
   onClose,
   onAddTournament,
+  onUpdateTournament,
+  tournamentToEdit,
   initialCategory,
   isPostedByAdmin,
 }) => {
@@ -105,11 +109,11 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const [ageSelect, setAgeSelect] = useState<string>('College/University');
   const [customAge, setCustomAge] = useState('');
 
-  const [entryFee, setEntryFee] = useState<number>(0);
+  const [entryFee, setEntryFee] = useState<number | string>('');
   const [prizePool, setPrizePool] = useState('Rs. 50,000 Cash + Championship Trophy & Certificates');
   
-  // Changed "team/ player slots" to total teams
-  const [totalTeams, setTotalTeams] = useState<number>(16);
+  // Total teams is completely optional — empty string means open / unconstrained
+  const [totalTeams, setTotalTeams] = useState<number | string>('');
   const [audienceAdmission, setAudienceAdmission] = useState('Free for spectators');
   
   // Description is optional
@@ -120,6 +124,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const [hostOrg, setHostOrg] = useState('');
   const [hostEmail, setHostEmail] = useState('');
   const [hostPhone, setHostPhone] = useState('');
+  const [hostPhoneSecondary, setHostPhoneSecondary] = useState('');
 
   // Host Payment Source & QR Code
   const [hasPaymentQr, setHasPaymentQr] = useState<boolean>(true);
@@ -135,54 +140,103 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const [website, setWebsite] = useState('');
   const [whatsappGroupLink, setWhatsappGroupLink] = useState('');
 
-  // Auto-Fill Scanner state
+  // Auto-Fill Scanner state with realistic 45-60s timer & manual fallback
   const [isAnalyzingPoster, setIsAnalyzingPoster] = useState(false);
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
   const [scanStepIndex, setScanStepIndex] = useState(0);
-  const [scanProgress, setScanProgress] = useState(15);
-  const [estSecondsLeft, setEstSecondsLeft] = useState(3);
+  const [scanProgress, setScanProgress] = useState(10);
+  const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const SCAN_STAGES = [
     'Scanning flyer typography & title...',
     'Detecting event dates & schedule...',
     'Locating venue, city & Nepal province...',
     'Extracting entry fee & prize pool...',
+    'Reading organizer contact numbers...',
     'Auto-filling tournament details...',
   ];
 
+  // Pre-populate fields when editing an existing event
+  useEffect(() => {
+    if (tournamentToEdit && isOpen) {
+      setTitle(tournamentToEdit.title || '');
+      setPosterUrl(tournamentToEdit.posterUrl || DEFAULT_POSTER_FALLBACK);
+      setCustomPosterFile(null);
+      setOfficialLink(tournamentToEdit.officialLink || '');
+      setIsCharity(Boolean(tournamentToEdit.isCharity));
+      setHasNoSlots(Boolean(tournamentToEdit.hasNoSlots));
+      setCauseTitle(tournamentToEdit.causeTitle || "Prime Minister's Disaster Relief Fund (प्रधानमन्त्री दैवी प्रकोप उद्धार कोष)");
+      setDonationLink(tournamentToEdit.donationLink || '');
+      setReliefBankDetails(tournamentToEdit.reliefBankDetails || '');
+      setCalendarType(tournamentToEdit.calendarType || 'AD');
+      setStartDate(tournamentToEdit.startDate || tournamentToEdit.date || getUpcomingDateStr(7));
+      setEndDate(tournamentToEdit.endDate || tournamentToEdit.startDate || tournamentToEdit.date || getUpcomingDateStr(8));
+      setTime(tournamentToEdit.time || '09:00 AM - 05:00 PM NPT');
+      setLocation(tournamentToEdit.location || '');
+      setCity(tournamentToEdit.city || 'Kathmandu');
+      setProvince(tournamentToEdit.province || 'Bagmati');
+      setRegistrationDeadline(tournamentToEdit.registrationDeadline || getUpcomingDateStr(5));
+      setCategorySelect(tournamentToEdit.category || 'Football');
+      setFormatSelect(tournamentToEdit.type || '7v7 Knockout');
+      setAgeSelect(tournamentToEdit.ageGroup || 'College/University');
+      setEntryFee(tournamentToEdit.entryFee ?? 0);
+      setPrizePool(tournamentToEdit.prizePool || '');
+      setTotalTeams(tournamentToEdit.totalTeams !== undefined && tournamentToEdit.totalTeams !== null && tournamentToEdit.totalTeams > 0 ? tournamentToEdit.totalTeams : '');
+      setAudienceAdmission(tournamentToEdit.audienceAdmission || 'Free for spectators');
+      setDescription(tournamentToEdit.description || '');
+      setHostName(tournamentToEdit.hostName || '');
+      setHostOrg(tournamentToEdit.hostOrg || '');
+      setHostEmail(tournamentToEdit.hostEmail || '');
+      setHostPhone(tournamentToEdit.hostPhone || '');
+      setHostPhoneSecondary(tournamentToEdit.hostPhoneSecondary || tournamentToEdit.secondaryPhone || '');
+      setHasPaymentQr(Boolean(tournamentToEdit.hostPaymentQrUrl || tournamentToEdit.hostPaymentMethod));
+      if (tournamentToEdit.hostPaymentMethod) {
+        setHostPaymentMethod(tournamentToEdit.hostPaymentMethod as any);
+      }
+      setHostPaymentNumber(tournamentToEdit.hostPaymentNumber || '');
+      setHostPaymentInstructions(tournamentToEdit.hostPaymentInstructions || '');
+      setHostQrFile(tournamentToEdit.hostPaymentQrUrl || null);
+      if (tournamentToEdit.socialLinks) {
+        setInstagram(tournamentToEdit.socialLinks.instagram || '');
+        setFacebook(tournamentToEdit.socialLinks.facebook || '');
+        setWhatsapp(tournamentToEdit.socialLinks.whatsapp || '');
+        setWebsite(tournamentToEdit.socialLinks.website || '');
+      }
+      setWhatsappGroupLink(tournamentToEdit.whatsappGroupLink || '');
+      setPostAsAdmin(Boolean(tournamentToEdit.postedByAdmin));
+      setIsOrganizerCertified(true);
+      setCaptchaData(prev => ({ ...prev, isVerified: true }));
+    }
+  }, [tournamentToEdit, isOpen]);
+
+  // Scanner progression tracking real elapsed time honestly
   useEffect(() => {
     if (!isAnalyzingPoster) {
       setScanStepIndex(0);
-      setScanProgress(15);
-      setEstSecondsLeft(3);
+      setScanProgress(5);
+      setScanElapsedSeconds(0);
       return;
     }
 
     const stepInterval = setInterval(() => {
       setScanStepIndex((prev) => (prev + 1) % SCAN_STAGES.length);
-    }, 450);
+    }, 3500);
 
-    const start = Date.now();
-    const progressInterval = setInterval(() => {
-      const elapsed = Date.now() - start;
-      if (elapsed < 600) {
-        setScanProgress(30);
-        setEstSecondsLeft(3);
-      } else if (elapsed < 1200) {
-        setScanProgress(55);
-        setEstSecondsLeft(2);
-      } else if (elapsed < 1800) {
-        setScanProgress(75);
-        setEstSecondsLeft(1);
-      } else {
-        setScanProgress(90);
-        setEstSecondsLeft(1);
-      }
-    }, 200);
+    const timerInterval = setInterval(() => {
+      setScanElapsedSeconds((prev) => {
+        const next = prev + 1;
+        // Asymptotic progress towards 95% that never falsely claims completion early
+        // Starts responsive, then reflects genuine wait time without fake 100%
+        const pct = Math.min(95, Math.max(5, Math.round(95 * (1 - Math.exp(-next / 40)))));
+        setScanProgress(pct);
+        return next;
+      });
+    }, 1000);
 
     return () => {
       clearInterval(stepInterval);
-      clearInterval(progressInterval);
+      clearInterval(timerInterval);
     };
   }, [isAnalyzingPoster]);
 
@@ -255,10 +309,22 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     });
   };
 
+  const handleSkipAndFillManually = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsAnalyzingPoster(false);
+    setAiSuccessMessage(null);
+  };
+
   // AI Multimodal Poster Analysis (Automatic Form Population with Full Editability)
   const analyzePosterWithAi = async (dataUrl: string) => {
     if (!dataUrl) return;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsAnalyzingPoster(true);
+    setScanElapsedSeconds(0);
     setAiSuccessMessage(null);
     setErrorMsg('');
 
@@ -266,6 +332,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       const res = await fetch('/api/analyze-poster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           imageBase64: dataUrl,
           mimeType: dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
@@ -408,7 +475,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
         setTotalTeams(Number(d.totalTeams));
       }
 
-      // 11. Host Organizers & Contact
+      // 11. Host Organizers & Contact Phone(s)
       if (d.hostName && typeof d.hostName === 'string' && d.hostName.trim()) {
         setHostName(d.hostName.trim());
         count++;
@@ -419,6 +486,10 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       }
       if (d.hostPhone && typeof d.hostPhone === 'string' && d.hostPhone.trim()) {
         setHostPhone(d.hostPhone.trim());
+        count++;
+      }
+      if (d.hostPhoneSecondary && typeof d.hostPhoneSecondary === 'string' && d.hostPhoneSecondary.trim()) {
+        setHostPhoneSecondary(d.hostPhoneSecondary.trim());
         count++;
       }
       if (d.hostEmail && typeof d.hostEmail === 'string' && d.hostEmail.trim()) {
@@ -437,12 +508,15 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       }
 
       setScanProgress(100);
-      setEstSecondsLeft(0);
       setAiSuccessMessage(`Auto-filled ${count} fields directly from your flyer! All information is fully editable below before publishing.`);
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return;
+      }
       console.warn('Auto-fill poster scan notice:', err);
     } finally {
       setIsAnalyzingPoster(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -497,31 +571,6 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       setErrorMsg('Please provide a tournament title.');
       return;
     }
-    if (formatSelect === 'Other' && !customFormat.trim()) {
-      setErrorMsg('Please specify the custom tournament format.');
-      return;
-    }
-    if (ageSelect === 'Other' && !customAge.trim()) {
-      setErrorMsg('Please specify the custom age division.');
-      return;
-    }
-    if (!location.trim() || !city.trim()) {
-      setErrorMsg('Please specify the court venue and city in Nepal.');
-      return;
-    }
-    if (!hostName.trim()) {
-      setErrorMsg('Please enter host / lead organizer name.');
-      return;
-    }
-    if (!hostEmail.trim()) {
-      setErrorMsg('Official organizer email is required for authenticity.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(hostEmail.trim())) {
-      setErrorMsg('Please enter a valid email address.');
-      return;
-    }
 
     // STRICT COMPULSORY PHONE CHECK & NEPAL FORMAT
     if (!hostPhone.trim()) {
@@ -538,45 +587,57 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       return;
     }
 
-    // 1. Anti-Bot CAPTCHA Verification
-    if (!captchaData.isVerified) {
-      setErrorMsg('Please solve the security challenge below to verify you are a human.');
-      return;
+    // Secondary phone validation if provided
+    if (hostPhoneSecondary.trim()) {
+      const secDigits = hostPhoneSecondary.trim().replace(/\D/g, '');
+      if (secDigits.length < 7) {
+        setErrorMsg('Please enter a valid secondary phone number or leave the field blank.');
+        return;
+      }
     }
 
-    // 2. Organizer Scam Shield Declaration
-    if (!isOrganizerCertified) {
-      setErrorMsg('Please check the Organizer Authenticity & Scam Shield certification box before publishing.');
-      return;
+    // Anti-Bot & Authenticity check for fresh submissions (bypassable when editing by verified admin/organizer)
+    if (!tournamentToEdit && !postAsAdmin) {
+      if (!captchaData.isVerified) {
+        setErrorMsg('Please solve the security challenge below to verify you are a human.');
+        return;
+      }
+
+      if (!isOrganizerCertified) {
+        setErrorMsg('Please check the Organizer Authenticity & Scam Shield certification box before publishing.');
+        return;
+      }
     }
 
     setErrorMsg('');
     setIsSubmitting(true);
 
-    // 3. Server-Side Security & Anti-Scam Verification Check
-    try {
-      const secRes = await fetch('/api/security/verify-submission', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          captchaAnswer: captchaData.captchaAnswer,
-          expectedAnswer: captchaData.expectedAnswer,
-          honeypot: captchaData.honeypotValue,
-          timeElapsedMs: captchaData.timeElapsedMs,
-          title: title.trim(),
-          description: description.trim(),
-          phone: hostPhone.trim(),
-        }),
-      });
+    // Server-Side Security Check for new submissions
+    if (!tournamentToEdit && !postAsAdmin) {
+      try {
+        const secRes = await fetch('/api/security/verify-submission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            captchaAnswer: captchaData.captchaAnswer,
+            expectedAnswer: captchaData.expectedAnswer,
+            honeypot: captchaData.honeypotValue,
+            timeElapsedMs: captchaData.timeElapsedMs,
+            title: title.trim(),
+            description: description.trim(),
+            phone: hostPhone.trim(),
+          }),
+        });
 
-      const secJson = await secRes.json();
-      if (!secJson.success) {
-        setErrorMsg(secJson.message || 'Security verification failed.');
-        setIsSubmitting(false);
-        return;
+        const secJson = await secRes.json();
+        if (!secJson.success) {
+          setErrorMsg(secJson.message || 'Security verification failed.');
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (secErr) {
+        console.warn('Security verify network notice:', secErr);
       }
-    } catch (secErr) {
-      console.warn('Security verify network notice:', secErr);
     }
 
     setTimeout(() => {
@@ -586,8 +647,9 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       if (whatsapp.trim()) socialLinks.whatsapp = whatsapp.trim();
       if (website.trim()) socialLinks.website = website.trim().startsWith('http') ? website.trim() : `https://${website.trim()}`;
 
-      const newTournament: Tournament = {
-        id: `kt-${Date.now()}`,
+      const savedTournament: Tournament = {
+        ...(tournamentToEdit || {}),
+        id: tournamentToEdit ? tournamentToEdit.id : `kt-${Date.now()}`,
         title: title.trim(),
         category: isCharity ? 'Charity & Relief' : effectiveCategory,
         posterUrl: posterUrl,
@@ -597,26 +659,28 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
         bsStartDate: calendarType === 'BS' ? bsStartDateStr : convertAdToBs(startDate).bsDateStr,
         bsEndDate: calendarType === 'BS' ? bsEndDateStr : convertAdToBs(endDate || startDate).bsDateStr,
         date: startDate,
-        time,
+        time: time.trim() || '09:00 AM - 05:00 PM NPT',
         registrationDeadline: registrationDeadline.trim() ? registrationDeadline.trim() : (endDate || startDate),
-        location: location.trim(),
-        city: city.trim(),
+        location: location.trim() || 'Venue TBA / Online',
+        city: city.trim() || 'Nepal',
         province: province,
         stateCountry: `${province}, Nepal`,
-        type: isCharity ? (effectiveFormat || 'Flood Relief / Charity') : effectiveFormat,
+        type: isCharity ? (effectiveFormat || 'Flood Relief / Charity') : (effectiveFormat || 'Open Format'),
         entryFee: Number(entryFee) || 0,
-        ageGroup: effectiveAge,
-        prizePool: (isCharity || hasNoSlots) ? (prizePool.trim() || 'Direct Emergency Aid & Community Rehabilitation') : prizePool.trim(),
-        hasNoSlots: hasNoSlots || isCharity,
+        ageGroup: effectiveAge || 'Open',
+        prizePool: (isCharity || hasNoSlots) ? (prizePool.trim() || 'Direct Emergency Aid & Community Rehabilitation') : (prizePool.trim() || 'Trophy & Certificates'),
+        hasNoSlots: hasNoSlots || isCharity || totalTeams === '' || Number(totalTeams) === 0,
         isReliefFund: isCharity || effectiveCategory === 'Charity & Relief',
-        totalTeams: (hasNoSlots || isCharity) ? 0 : (Number(totalTeams) || 16),
-        registeredTeamsCount: 0,
-        postedByAdmin: Boolean(isPostedByAdmin || postAsAdmin),
-        hostVerificationType: Boolean(isPostedByAdmin || postAsAdmin) ? 'admin' : undefined,
-        hostName: hostName.trim(),
+        totalTeams: (hasNoSlots || isCharity || totalTeams === '') ? 0 : (Number(totalTeams) > 0 ? Number(totalTeams) : 0),
+        registeredTeamsCount: tournamentToEdit ? (tournamentToEdit.registeredTeamsCount || 0) : 0,
+        postedByAdmin: Boolean(isPostedByAdmin || postAsAdmin || tournamentToEdit?.postedByAdmin),
+        hostVerificationType: (isPostedByAdmin || postAsAdmin || tournamentToEdit?.postedByAdmin) ? 'admin' : tournamentToEdit?.hostVerificationType,
+        hostName: hostName.trim() || 'Lead Organizer',
         hostOrg: hostOrg.trim() || undefined,
-        hostEmail: hostEmail.trim(),
+        hostEmail: hostEmail.trim() || 'organizer@katatira.np',
         hostPhone: hostPhone.trim(),
+        hostPhoneSecondary: hostPhoneSecondary.trim() || undefined,
+        secondaryPhone: hostPhoneSecondary.trim() || undefined,
         description: description.trim() ? description.trim() : undefined,
         audienceAdmission,
         officialLink: officialLink.trim() ? (officialLink.trim().startsWith('http') ? officialLink.trim() : `https://${officialLink.trim()}`) : undefined,
@@ -630,13 +694,17 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
         hostPaymentInstructions: hostPaymentInstructions.trim() || undefined,
         socialLinks: Object.keys(socialLinks).length > 0 ? socialLinks : undefined,
         whatsappGroupLink: whatsappGroupLink.trim() || undefined,
-        createdAt: new Date().toISOString(),
+        createdAt: tournamentToEdit ? tournamentToEdit.createdAt : new Date().toISOString(),
       };
 
-      onAddTournament(newTournament);
+      if (tournamentToEdit && onUpdateTournament) {
+        onUpdateTournament(savedTournament);
+      } else {
+        onAddTournament(savedTournament);
+      }
       setIsSubmitting(false);
       onClose();
-    }, 400);
+    }, 350);
   };
 
   if (!isOpen) return null;
@@ -655,10 +723,10 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
             </div>
             <div>
               <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 leading-tight">
-                Host an Event or Tournament in Nepal
+                {tournamentToEdit ? 'Edit Tournament Details' : 'Host an Event or Tournament in Nepal'}
               </h2>
               <p className="text-xs text-slate-500">
-                Publish sports tournaments, futsal, basketball, MUNs, quizzes, and relief drives in Nepal
+                {tournamentToEdit ? 'Update details, schedule, prize pool or contact phone' : 'Publish sports tournaments, futsal, basketball, MUNs, quizzes, and relief drives in Nepal'}
               </p>
             </div>
           </div>
@@ -700,51 +768,6 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
             </span>
           </button>
         </div>
-
-        {/* AUTO-FILL SCANNER STATUS BANNER */}
-        {isAnalyzingPoster && (
-          <div className="mx-4 sm:mx-6 mt-4 overflow-hidden rounded-2xl bg-slate-900 border-2 border-orange-500 p-4 shadow-xl text-white animate-in fade-in duration-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/40">
-                  <RefreshCw className="h-5 w-5 animate-spin" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-display font-bold text-sm text-white flex items-center gap-1.5">
-                      <span>Auto-Fill Scanner</span>
-                    </h4>
-                    <span className="rounded-full bg-orange-500/20 border border-orange-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-orange-400">
-                      Scanning Flyer
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5 font-medium">
-                    <span className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
-                    <span>{SCAN_STAGES[scanStepIndex]}</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Real Progress Bar & Estimated Time to Finish */}
-              <div className="w-full sm:w-64 shrink-0 space-y-1">
-                <div className="flex items-center justify-between text-[11px] font-mono">
-                  <span className="text-slate-300">Loading details</span>
-                  <span className="text-orange-400 font-bold">{scanProgress}%</span>
-                </div>
-                <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700 p-0.5">
-                  <div
-                    className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${scanProgress}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                  <span>Auto-filling form</span>
-                  <span className="text-orange-300 font-bold">Est. time: ~{estSecondsLeft}s</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* HIGH-VISIBILITY SUCCESS NOTIFICATION (100% Editable) */}
         {aiSuccessMessage && !isAnalyzingPoster && (
@@ -816,7 +839,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                   disabled={isSubmitting}
                   className="rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition-all active:scale-95 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Publishing...' : 'Looks Good • Publish Live'}
+                  {isSubmitting ? (tournamentToEdit ? 'Saving...' : 'Publishing...') : (tournamentToEdit ? 'Save Changes' : 'Looks Good • Publish Live')}
                 </button>
               </div>
             </div>
@@ -849,7 +872,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                         {title.trim() || 'Untitled Tournament / Event'}
                       </h4>
                       <p className="text-xs text-slate-300 font-medium">
-                        By {hostOrg.trim() || hostName.trim() || 'Organizer'}
+                        By {hostOrg.trim() || 'Event Organization'}
                       </p>
                     </div>
                   </div>
@@ -882,7 +905,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       <div>
                         <span className="text-[9px] text-slate-400 block font-bold">ENTRY</span>
                         <span className="font-bold text-slate-900 truncate block">
-                          {entryFee === 0 ? 'FREE' : `Rs. ${entryFee.toLocaleString()}`}
+                          {entryFee === '' || Number(entryFee) === 0 ? 'FREE' : `Rs. ${Number(entryFee).toLocaleString()}`}
                         </span>
                       </div>
                     </div>
@@ -964,7 +987,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
                 <div className="mb-2 flex items-center justify-between">
                   <label className="text-xs font-bold uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
-                    <Upload className="h-4 w-4" /> Tournament Poster / Official Flyer
+                    <Upload className="h-4 w-4" /> Tournament Poster / Flyer
                   </label>
                   <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700">
                     <Sparkles className="h-3 w-3" /> Auto-Fill Powered
@@ -973,7 +996,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
                 {/* When scanning: HIGH-CONTRAST LASER SCANNER HUD */}
                 {isAnalyzingPoster ? (
-                  <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-orange-500 bg-slate-950 p-6 text-center text-white overflow-hidden shadow-2xl shadow-orange-500/30 min-h-[220px]">
+                  <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-orange-500 bg-slate-950 p-6 text-center text-white overflow-hidden shadow-2xl shadow-orange-500/30 min-h-[260px]">
                     {/* Laser Scanner Line traversing vertically */}
                     <div className="absolute left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-orange-400 to-transparent shadow-[0_0_25px_#f97316] animate-scanner-beam pointer-events-none z-20" />
                     
@@ -990,7 +1013,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                     )}
 
                     {/* Scanner Foreground Content */}
-                    <div className="relative z-10 flex flex-col items-center justify-center space-y-3.5 max-w-sm w-full">
+                    <div className="relative z-10 flex flex-col items-center justify-center space-y-4 max-w-md w-full">
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/40">
                         <RefreshCw className="h-6 w-6 animate-spin" />
                       </div>
@@ -999,29 +1022,51 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-0.5 text-[11px] font-mono font-bold text-orange-300">
                           Auto-Fill Scanner
                         </span>
-                        <h4 className="font-display font-black text-lg text-white mt-1.5 tracking-tight">
+                        <h4 className="font-display font-black text-lg text-white mt-1 tracking-tight">
                           Scanning Flyer...
                         </h4>
-                        <p className="text-xs font-mono font-medium text-orange-300 mt-1">
+                        <p className="text-xs font-mono font-medium text-orange-300 mt-0.5">
                           {SCAN_STAGES[scanStepIndex]}
                         </p>
                       </div>
 
-                      {/* Dynamic Loading Bar & Estimated Time */}
-                      <div className="w-full space-y-1.5">
+                      {/* Real Live Elapsed Timer & Genuine Progress */}
+                      <div className="w-full space-y-1.5 bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 text-left">
                         <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
-                          <span>Reading flyer</span>
+                          <span>Reading flyer image & text...</span>
                           <span className="text-orange-400 font-bold">{scanProgress}%</span>
                         </div>
-                        <div className="w-full bg-slate-900 border border-slate-700 rounded-full h-3 overflow-hidden shadow-inner p-0.5">
+                        <div className="w-full bg-slate-950 border border-slate-700 rounded-full h-3 overflow-hidden shadow-inner p-0.5">
                           <div
                             className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full transition-all duration-300 ease-out"
                             style={{ width: `${scanProgress}%` }}
                           />
                         </div>
-                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                          <span>Auto-fill in progress</span>
-                          <span className="text-orange-300 font-bold">Est. time to finish: ~{estSecondsLeft}s</span>
+                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                          <span>Time Elapsed: <strong className="text-white text-xs">{scanElapsedSeconds}s</strong></span>
+                          <span className="text-orange-300 font-semibold">
+                            {scanElapsedSeconds >= 60 ? 'Processing response...' : 'Parsing details live...'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Prompt & Decision Box: Wait or Fill Manually */}
+                      <div className="w-full rounded-xl bg-orange-950/60 border border-orange-500/40 p-3 text-left space-y-2">
+                        <p className="text-xs text-orange-200 leading-relaxed font-medium">
+                          Processing time depends on image resolution and network speed (live timer above). You can let it auto-fill or skip straight to manual entry at any moment.
+                        </p>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-0.5">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-orange-300">
+                            <span className="h-2 w-2 rounded-full bg-orange-400 animate-ping" />
+                            Active scan ({scanElapsedSeconds}s)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleSkipAndFillManually}
+                            className="rounded-lg bg-white hover:bg-slate-100 text-slate-900 px-3 py-1.5 text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer text-center"
+                          >
+                            Fill Manually Instead (Skip Waiting)
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1092,7 +1137,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       Upload Tournament Flyer / Poster
                     </p>
                     <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                      Upload official flyer (PNG, JPG) — auto-fill scanner reads title, dates, venue, entry fee & prizes!
+                      Upload tournament flyer (PNG, JPG) — auto-fill scanner reads title, dates, venue, entry fee & prizes!
                     </p>
                     <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white border border-orange-200 px-3 py-1 text-[11px] font-bold text-orange-600 shadow-2xs">
                       <RefreshCw className="h-3.5 w-3.5" /> Auto-Fill Scanner Enabled
@@ -1174,7 +1219,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                         type="url"
                         value={donationLink}
                         onChange={(e) => setDonationLink(e.target.value)}
-                        placeholder="https://opmcm.gov.np or official donation page"
+                        placeholder="https://opmcm.gov.np or donation page"
                         className="w-full rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-rose-500 focus:outline-none"
                       />
                     </div>
@@ -1195,21 +1240,21 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                 )}
               </div>
 
-              {/* OFFICIAL EVENT LINK FIELD */}
+              {/* EVENT LINK FIELD */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-800 mb-1.5 flex items-center gap-1.5">
                   <LinkIcon className="h-3.5 w-3.5 text-orange-500" />
-                  Official Website or Event Portal URL (Optional)
+                  Website or Event Portal URL (Optional)
                 </label>
                 <input
                   type="url"
                   value={officialLink}
                   onChange={(e) => setOfficialLink(e.target.value)}
-                  placeholder="https://yourclub.org or official Facebook event page"
+                  placeholder="https://yourclub.org or Facebook event page"
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-orange-500 focus:outline-none"
                 />
                 <span className="text-[11px] text-slate-400 block mt-1">
-                  Adds a verified direct link button on the tournament card so participants can view official portals.
+                  Adds a direct link button on the tournament card so participants can view event information.
                 </span>
               </div>
 
@@ -1271,7 +1316,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Event Format *
+                      Event Format <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <select
                       value={formatSelect}
@@ -1361,24 +1406,33 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      {hasNoSlots || isCharity ? 'Registration / Donation Fee (Rs.)' : 'Entry Fee (Rs. NPR) *'}
+                      {hasNoSlots || isCharity ? 'Registration / Donation Fee (Rs.)' : 'Entry Fee (Rs. NPR)'}
                     </label>
                     <input
                       type="number"
                       min={0}
                       value={entryFee}
-                      onChange={(e) => setEntryFee(Number(e.target.value))}
-                      placeholder="0 for free"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setEntryFee('');
+                        } else {
+                          // Strip leading zeros like '020' -> 20
+                          const parsed = Number(val);
+                          setEntryFee(isNaN(parsed) ? '' : parsed);
+                        }
+                      }}
+                      placeholder="0 (Free entry)"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                     <span className="text-[10px] text-slate-400">
-                      {hasNoSlots || isCharity ? 'Set 0 for voluntary open donation' : 'Set 0 for free entry'}
+                      {hasNoSlots || isCharity ? 'Leave blank or 0 for voluntary donation' : 'Leave blank or 0 for free entry'}
                     </span>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      {hasNoSlots || isCharity ? 'Participation Scope' : 'Total Teams *'}
+                      {hasNoSlots || isCharity ? 'Participation Scope' : 'Total Teams (Optional — No limit if blank)'}
                     </label>
                     {hasNoSlots || isCharity ? (
                       <div className="flex h-[42px] items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-800">
@@ -1389,11 +1443,23 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                         type="number"
                         min={2}
                         value={totalTeams}
-                        onChange={(e) => setTotalTeams(Number(e.target.value))}
-                        placeholder="16"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setTotalTeams('');
+                          } else {
+                            // Strip leading zeros like '020' -> 20
+                            const parsed = Number(val);
+                            setTotalTeams(isNaN(parsed) ? '' : parsed);
+                          }
+                        }}
+                        placeholder="Optional (e.g. 16, 24, 32 or leave blank)"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                       />
                     )}
+                    <span className="text-[10px] text-slate-400">
+                      Leave blank if there is no team limit or slots are open.
+                    </span>
                   </div>
                 </div>
 
@@ -1639,35 +1705,33 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Venue / Court Name *
+                      Venue / Ground <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <input
                       type="text"
-                      required
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
-                      placeholder="e.g. Dhuku Futsal Hub"
+                      placeholder="e.g. Dhuku Futsal Hub (or TBA / Online)"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      City in Nepal *
+                      City in Nepal <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
                     <input
                       type="text"
-                      required
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      placeholder="e.g. Kathmandu, Pokhara, Dharan"
+                      placeholder="e.g. Kathmandu, Pokhara (default: Nepal)"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Province in Nepal *
+                      Province in Nepal
                     </label>
                     <select
                       value={province}
@@ -1859,30 +1923,51 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                 </div>
               </div>
 
-              {/* ORGANIZER CONTACT DETAILS */}
+              {/* ORGANIZER CONTACT DETAILS & PUBLIC TRANSPARENCY */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  Organizer Contact Details
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Organizer Contact & Transparency
+                  </h3>
+                  <span className="text-[11px] font-bold text-slate-500">
+                    Privacy Protected
+                  </span>
+                </div>
+
+                {/* Transparency Notice Box */}
+                <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3.5 text-xs text-blue-900 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-950">
+                    <ShieldCheck className="h-4 w-4 text-blue-600 shrink-0" />
+                    <span>Public Display & Privacy Disclosure</span>
+                  </div>
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    • <strong>Displayed Publicly:</strong> Event Flyer, Title, Category, Dates, Venue, Fees, Prize Pool, <strong>Organization Name</strong>, <strong>Contact Phone Number(s)</strong>, and Links for attendees to reference.<br />
+                    • <strong>Kept Strictly Private:</strong> Personal Organizer Name and Email are strictly used for verification and admin alerts—they are <strong>never</strong> displayed publicly.
+                  </p>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Host Name / Lead Organizer *
+                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Lead Organizer Name</span>
+                      <span className="text-[10px] font-bold text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded">🔒 Private</span>
                     </label>
                     <input
                       type="text"
-                      required
                       value={hostName}
                       onChange={(e) => setHostName(e.target.value)}
                       placeholder="e.g. Bikash Shrestha"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Never shown to public participants.
+                    </p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Club / Organization Name
+                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Club / Organization Name</span>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded">🌐 Public</span>
                     </label>
                     <input
                       type="text"
@@ -1891,31 +1976,34 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       placeholder="e.g. Nepal Basketball Association"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Displayed on event card & details page.
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Official Email (For OTP Verification) *
+                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Organizer Email</span>
+                      <span className="text-[10px] font-bold text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded">🔒 Private</span>
                     </label>
                     <input
                       type="email"
-                      required
                       value={hostEmail}
                       onChange={(e) => setHostEmail(e.target.value)}
-                      placeholder="host@gmail.com"
+                      placeholder="organizer@gmail.com"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      An authentic 6-digit OTP will be sent to verify you are a genuine host.
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Private for OTP & system notifications.
                     </p>
                   </div>
 
                   <div>
                     <label className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
-                      <span>Contact Phone (Nepal) <strong className="text-rose-600 font-bold">* Compulsory</strong></span>
-                      <span className="text-[10px] text-orange-600 font-medium">WhatsApp Updates</span>
+                      <span>Primary Phone (Nepal) <strong className="text-rose-600 font-bold">*</strong></span>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">🌐 Public</span>
                     </label>
                     <input
                       type="tel"
@@ -1925,15 +2013,33 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       placeholder="e.g. +977 9841234567"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      Compulsory: Registered teams will receive an invite to reach you directly on this number.
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Direct WhatsApp / call number for team inquiries.
                     </p>
                   </div>
                 </div>
 
+                {/* Secondary Phone Number Field */}
+                <div>
+                  <label className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
+                    <span>Secondary / Alternate Phone (Optional)</span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">🌐 Public</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={hostPhoneSecondary}
+                    onChange={(e) => setHostPhoneSecondary(e.target.value)}
+                    placeholder="e.g. +977 9801234567 or landline 01-XXXXXXX"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Optional secondary number displayed for player and team coordination.
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Official WhatsApp Group Invite Link <span className="text-slate-400 font-normal">(Optional)</span>
+                    WhatsApp Group Invite Link <span className="text-slate-400 font-normal">(Optional)</span>
                   </label>
                   <input
                     type="url"
@@ -2011,14 +2117,16 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       </div>
                       <div>
                         <span className="text-[9px] text-slate-400 block font-bold">TOTAL TEAMS</span>
-                        <span className="font-bold text-slate-900">{totalTeams} Teams</span>
+                        <span className="font-bold text-slate-900">
+                          {totalTeams !== '' && Number(totalTeams) > 0 ? `${totalTeams} Teams` : 'Open / No Limit'}
+                        </span>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
                       <span className="text-slate-500 font-medium">Entry Fee:</span>
                       <span className="font-bold text-orange-600">
-                        {entryFee === 0 ? 'FREE' : `Rs. ${entryFee.toLocaleString()}`} (No Extra Fees)
+                        {entryFee === '' || Number(entryFee) === 0 ? 'FREE' : `Rs. ${Number(entryFee).toLocaleString()}`} (No Extra Fees)
                       </span>
                     </div>
 
@@ -2057,7 +2165,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                     <span>Publish with "Posted by Admin" Badge</span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
-                    Admin session authenticated. When checked, this event will show the official "Posted by Admin" badge.
+                    Admin session authenticated. When checked, this event will show the "Posted by Admin" badge.
                   </span>
                 </div>
               </label>
@@ -2124,18 +2232,18 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
             <button
               type="submit"
-              disabled={isSubmitting || !captchaData.isVerified || !isOrganizerCertified}
+              disabled={isSubmitting || (!tournamentToEdit && (!captchaData.isVerified || !isOrganizerCertified))}
               className="flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (
                 <>
                   <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Verifying & Publishing...</span>
+                  <span>{tournamentToEdit ? 'Saving Changes...' : 'Verifying & Publishing...'}</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="h-4 w-4 text-white" />
-                  <span>Publish Tournament Live</span>
+                  <span>{tournamentToEdit ? 'Save Changes' : 'Publish Tournament Live'}</span>
                 </>
               )}
             </button>
