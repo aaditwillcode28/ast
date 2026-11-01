@@ -188,3 +188,16 @@ export interface OrganizerProfile {
   documentsSubmitted?: string[];
   notes?: string;
 }
+
+export interface CommunityVideo {
+  id: string;
+  youtubeUrl: string;
+  youtubeId: string;
+  title: string;
+  channelName: string;
+  thumbnailUrl: string;
+  category?: string;
+  addedBy?: string;
+  createdAt: string;
+}
+

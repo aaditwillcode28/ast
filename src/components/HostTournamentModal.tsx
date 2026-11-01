@@ -140,23 +140,6 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const [website, setWebsite] = useState('');
   const [whatsappGroupLink, setWhatsappGroupLink] = useState('');
 
-  // Auto-Fill Scanner state with realistic 45-60s timer & manual fallback
-  const [isAnalyzingPoster, setIsAnalyzingPoster] = useState(false);
-  const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
-  const [scanStepIndex, setScanStepIndex] = useState(0);
-  const [scanProgress, setScanProgress] = useState(10);
-  const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const SCAN_STAGES = [
-    'Scanning flyer typography & title...',
-    'Detecting event dates & schedule...',
-    'Locating venue, city & Nepal province...',
-    'Extracting entry fee & prize pool...',
-    'Reading organizer contact numbers...',
-    'Auto-filling tournament details...',
-  ];
-
   // Pre-populate fields when editing an existing event
   useEffect(() => {
     if (tournamentToEdit && isOpen) {
@@ -209,36 +192,6 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       setCaptchaData(prev => ({ ...prev, isVerified: true }));
     }
   }, [tournamentToEdit, isOpen]);
-
-  // Scanner progression tracking real elapsed time honestly
-  useEffect(() => {
-    if (!isAnalyzingPoster) {
-      setScanStepIndex(0);
-      setScanProgress(5);
-      setScanElapsedSeconds(0);
-      return;
-    }
-
-    const stepInterval = setInterval(() => {
-      setScanStepIndex((prev) => (prev + 1) % SCAN_STAGES.length);
-    }, 3500);
-
-    const timerInterval = setInterval(() => {
-      setScanElapsedSeconds((prev) => {
-        const next = prev + 1;
-        // Asymptotic progress towards 95% that never falsely claims completion early
-        // Starts responsive, then reflects genuine wait time without fake 100%
-        const pct = Math.min(95, Math.max(5, Math.round(95 * (1 - Math.exp(-next / 40)))));
-        setScanProgress(pct);
-        return next;
-      });
-    }, 1000);
-
-    return () => {
-      clearInterval(stepInterval);
-      clearInterval(timerInterval);
-    };
-  }, [isAnalyzingPoster]);
 
   // Anti-Bot and Anti-Scam Security State
   const [captchaData, setCaptchaData] = useState<{
@@ -309,217 +262,6 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     });
   };
 
-  const handleSkipAndFillManually = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsAnalyzingPoster(false);
-    setAiSuccessMessage(null);
-  };
-
-  // AI Multimodal Poster Analysis (Automatic Form Population with Full Editability)
-  const analyzePosterWithAi = async (dataUrl: string) => {
-    if (!dataUrl) return;
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-    setIsAnalyzingPoster(true);
-    setScanElapsedSeconds(0);
-    setAiSuccessMessage(null);
-    setErrorMsg('');
-
-    try {
-      const res = await fetch('/api/analyze-poster', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          imageBase64: dataUrl,
-          mimeType: dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error('Poster analysis service currently unavailable.');
-      }
-
-      const json = await res.json();
-      if (!json.success || !json.data) {
-        throw new Error(json.error || 'Could not parse poster details.');
-      }
-
-      const d = json.data;
-      let count = 0;
-
-      // 1. Title
-      if (d.title && typeof d.title === 'string' && d.title.trim()) {
-        setTitle(d.title.trim());
-        count++;
-      }
-
-      // 2. Category
-      if (d.category && typeof d.category === 'string') {
-        const catMap: { [key: string]: string } = {
-          'football': 'Football',
-          'futsal': 'Football',
-          'soccer': 'Football',
-          'basketball': 'Basketball',
-          'mun': 'MUN & Debate',
-          'debate': 'MUN & Debate',
-          'quiz': 'Quiz',
-          'esports': 'Esports',
-          'gaming': 'Esports',
-          'case competition': 'Case Competition',
-          'hackathon': 'Other',
-          'cultural': 'Cultural',
-          'charity': 'Charity & Relief',
-          'relief': 'Charity & Relief',
-        };
-        const lower = d.category.toLowerCase();
-        let matched = '';
-        for (const [k, v] of Object.entries(catMap)) {
-          if (lower.includes(k)) {
-            matched = v;
-            break;
-          }
-        }
-        if (matched) {
-          setCategorySelect(matched);
-        } else {
-          setCategorySelect('Other');
-          setCustomCategory(d.category);
-        }
-        count++;
-      }
-
-      // 3. Format / Type
-      if (d.format && typeof d.format === 'string' && d.format.trim()) {
-        const stdFormats = ['7v7 Knockout', '5v5 Futsal', 'League & Knockout', '3v3 Basketball', 'Single Elimination', 'Group Stage + Knockout', 'Open Knockout'];
-        const found = stdFormats.find(f => f.toLowerCase().includes(d.format.toLowerCase()));
-        if (found) {
-          setFormatSelect(found);
-        } else {
-          setFormatSelect('Other');
-          setCustomFormat(d.format.trim());
-        }
-        count++;
-      }
-
-      // 4. Age Division / Eligibility
-      if (d.ageGroup && typeof d.ageGroup === 'string' && d.ageGroup.trim()) {
-        const stdAges = ['Open', 'College/University', 'High School', 'U-19', 'U-16', 'U-14'];
-        const found = stdAges.find(a => a.toLowerCase() === d.ageGroup.toLowerCase());
-        if (found) {
-          setAgeSelect(found);
-        } else {
-          setAgeSelect('Other');
-          setCustomAge(d.ageGroup.trim());
-        }
-        count++;
-      }
-
-      // 5. Venue / Location & City
-      if (d.location && typeof d.location === 'string' && d.location.trim()) {
-        setLocation(d.location.trim());
-        count++;
-      }
-      if (d.city && typeof d.city === 'string' && d.city.trim()) {
-        setCity(d.city.trim());
-        count++;
-      }
-      if (d.province && typeof d.province === 'string' && d.province.trim()) {
-        const provs = ['Bagmati', 'Gandaki', 'Koshi', 'Lumbini', 'Madhesh', 'Karnali', 'Sudurpashchim'];
-        const found = provs.find(p => p.toLowerCase().includes(d.province.toLowerCase()));
-        if (found) setProvince(found);
-      }
-
-      // 6. Calendar Type & Dates
-      if (d.calendarType === 'BS') {
-        setCalendarType('BS');
-      } else if (d.calendarType === 'AD') {
-        setCalendarType('AD');
-      }
-
-      if (d.startDate && typeof d.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.startDate)) {
-        setStartDate(d.startDate);
-        if (d.endDate && typeof d.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.endDate)) {
-          setEndDate(d.endDate);
-        } else {
-          setEndDate(d.startDate);
-        }
-        count++;
-      }
-
-      // 7. Time
-      if (d.time && typeof d.time === 'string' && d.time.trim()) {
-        setTime(d.time.trim());
-      }
-
-      // 8. Entry Fee
-      if (d.entryFee !== undefined && d.entryFee !== null) {
-        const numFee = Number(d.entryFee);
-        if (!isNaN(numFee) && numFee >= 0) {
-          setEntryFee(numFee);
-          count++;
-        }
-      }
-
-      // 9. Prize Pool
-      if (d.prizePool && typeof d.prizePool === 'string' && d.prizePool.trim()) {
-        setPrizePool(d.prizePool.trim());
-        count++;
-      }
-
-      // 10. Max Teams
-      if (d.totalTeams && Number(d.totalTeams) > 0) {
-        setTotalTeams(Number(d.totalTeams));
-      }
-
-      // 11. Host Organizers & Contact Phone(s)
-      if (d.hostName && typeof d.hostName === 'string' && d.hostName.trim()) {
-        setHostName(d.hostName.trim());
-        count++;
-      }
-      if (d.hostOrg && typeof d.hostOrg === 'string' && d.hostOrg.trim()) {
-        setHostOrg(d.hostOrg.trim());
-        count++;
-      }
-      if (d.hostPhone && typeof d.hostPhone === 'string' && d.hostPhone.trim()) {
-        setHostPhone(d.hostPhone.trim());
-        count++;
-      }
-      if (d.hostPhoneSecondary && typeof d.hostPhoneSecondary === 'string' && d.hostPhoneSecondary.trim()) {
-        setHostPhoneSecondary(d.hostPhoneSecondary.trim());
-        count++;
-      }
-      if (d.hostEmail && typeof d.hostEmail === 'string' && d.hostEmail.trim()) {
-        setHostEmail(d.hostEmail.trim());
-      }
-
-      // 12. Deadline & Description & Links
-      if (d.registrationDeadline && typeof d.registrationDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.registrationDeadline)) {
-        setRegistrationDeadline(d.registrationDeadline);
-      }
-      if (d.description && typeof d.description === 'string' && d.description.trim()) {
-        setDescription(d.description.trim());
-      }
-      if (d.officialLink && typeof d.officialLink === 'string' && d.officialLink.trim()) {
-        setOfficialLink(d.officialLink.trim());
-      }
-
-      setScanProgress(100);
-      setAiSuccessMessage(`Auto-filled ${count} fields directly from your flyer! All information is fully editable below before publishing.`);
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return;
-      }
-      console.warn('Auto-fill poster scan notice:', err);
-    } finally {
-      setIsAnalyzingPoster(false);
-      abortControllerRef.current = null;
-    }
-  };
-
   // Handle file upload for poster/pamphlet
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -536,15 +278,11 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     }
 
     try {
-      // 1. High-res version for preview and tournament feed (1200px)
-      const displayDataUrl = await compressImageFile(file, 1200, 0.82);
+      const displayDataUrl = await compressImageFile(file, 1200, 0.85);
       if (displayDataUrl) {
         setCustomPosterFile(displayDataUrl);
         setPosterUrl(displayDataUrl);
         setErrorMsg('');
-        // 2. Ultra-compact version for AI vision (~60KB payload, fast network transfer & rapid model tokenization)
-        const fastVisionPayload = await compressImageFile(file, 750, 0.65);
-        analyzePosterWithAi(fastVisionPayload || displayDataUrl);
       }
     } catch {
       setErrorMsg('Could not process image file. Please try another image.');
@@ -769,39 +507,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
           </button>
         </div>
 
-        {/* HIGH-VISIBILITY SUCCESS NOTIFICATION (100% Editable) */}
-        {aiSuccessMessage && !isAnalyzingPoster && (
-          <div className="mx-4 sm:mx-6 mt-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border-2 border-emerald-500/90 p-4 shadow-xl shadow-emerald-500/25 text-white flex items-start justify-between gap-3 animate-in zoom-in-95 duration-200">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-500/30 mt-0.5">
-                <CheckCircle className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="font-display font-bold text-sm text-emerald-300 flex items-center gap-1.5">
-                    <span>✨ Tournament Details Auto-Filled</span>
-                  </h4>
-                  <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                    100% Editable
-                  </span>
-                </div>
-                <p className="text-xs text-slate-200 mt-1">
-                  {aiSuccessMessage}
-                </p>
-                <p className="text-[11px] text-emerald-400/90 mt-0.5">
-                  ✎ Review any pre-filled field below and freely modify dates, rules, or prizes before publishing.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAiSuccessMessage(null)}
-              className="rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white transition-colors shrink-0"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
+
 
         {/* Error notification */}
         {errorMsg && (
@@ -986,99 +692,22 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
               {/* POSTER / FLYER UPLOAD SECTION */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
                 <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
-                    <Upload className="h-4 w-4" /> Tournament Poster / Flyer
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <Upload className="h-4 w-4 text-orange-600" /> Tournament Poster / Flyer
                   </label>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                    <Sparkles className="h-3 w-3" /> Auto-Fill Powered
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Displayed prominently on listing & detail modal
                   </span>
                 </div>
 
-                {/* When scanning: HIGH-CONTRAST LASER SCANNER HUD */}
-                {isAnalyzingPoster ? (
-                  <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-orange-500 bg-slate-950 p-6 text-center text-white overflow-hidden shadow-2xl shadow-orange-500/30 min-h-[260px]">
-                    {/* Laser Scanner Line traversing vertically */}
-                    <div className="absolute left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-orange-400 to-transparent shadow-[0_0_25px_#f97316] animate-scanner-beam pointer-events-none z-20" />
-                    
-                    {/* Background poster image with scanner grid overlay */}
-                    {(customPosterFile || (posterUrl && posterUrl !== DEFAULT_POSTER_FALLBACK)) && (
-                      <div className="absolute inset-0 z-0">
+                {customPosterFile || (posterUrl && posterUrl !== DEFAULT_POSTER_FALLBACK) ? (
+                  /* Uploaded / Selected Poster Preview */
+                  <div className="relative mt-2 rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-xs">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                      <div className="relative h-32 w-28 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-sm">
                         <img
                           src={customPosterFile || posterUrl}
-                          alt="Poster Scanning"
-                          className="h-full w-full object-cover opacity-25 filter blur-[1px]"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/40 to-slate-950/90" />
-                      </div>
-                    )}
-
-                    {/* Scanner Foreground Content */}
-                    <div className="relative z-10 flex flex-col items-center justify-center space-y-4 max-w-md w-full">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/40">
-                        <RefreshCw className="h-6 w-6 animate-spin" />
-                      </div>
-
-                      <div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 border border-slate-700 px-3 py-0.5 text-[11px] font-mono font-bold text-orange-300">
-                          Auto-Fill Scanner
-                        </span>
-                        <h4 className="font-display font-black text-lg text-white mt-1 tracking-tight">
-                          Scanning Flyer...
-                        </h4>
-                        <p className="text-xs font-mono font-medium text-orange-300 mt-0.5">
-                          {SCAN_STAGES[scanStepIndex]}
-                        </p>
-                      </div>
-
-                      {/* Real Live Elapsed Timer & Genuine Progress */}
-                      <div className="w-full space-y-1.5 bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 text-left">
-                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
-                          <span>Reading flyer image & text...</span>
-                          <span className="text-orange-400 font-bold">{scanProgress}%</span>
-                        </div>
-                        <div className="w-full bg-slate-950 border border-slate-700 rounded-full h-3 overflow-hidden shadow-inner p-0.5">
-                          <div
-                            className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full transition-all duration-300 ease-out"
-                            style={{ width: `${scanProgress}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                          <span>Time Elapsed: <strong className="text-white text-xs">{scanElapsedSeconds}s</strong></span>
-                          <span className="text-orange-300 font-semibold">
-                            {scanElapsedSeconds >= 60 ? 'Processing response...' : 'Parsing details live...'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Prompt & Decision Box: Wait or Fill Manually */}
-                      <div className="w-full rounded-xl bg-orange-950/60 border border-orange-500/40 p-3 text-left space-y-2">
-                        <p className="text-xs text-orange-200 leading-relaxed font-medium">
-                          Processing time depends on image resolution and network speed (live timer above). You can let it auto-fill or skip straight to manual entry at any moment.
-                        </p>
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-0.5">
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-orange-300">
-                            <span className="h-2 w-2 rounded-full bg-orange-400 animate-ping" />
-                            Active scan ({scanElapsedSeconds}s)
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleSkipAndFillManually}
-                            className="rounded-lg bg-white hover:bg-slate-100 text-slate-900 px-3 py-1.5 text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer text-center"
-                          >
-                            Fill Manually Instead (Skip Waiting)
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : customPosterFile ? (
-                  /* When poster uploaded and not scanning: High-contrast preview box with prominent Re-scan button */
-                  <div className="relative mt-2 rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                      <div className="relative h-28 w-24 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-xs">
-                        <img
-                          src={customPosterFile}
-                          alt="Uploaded Flyer"
+                          alt="Tournament Flyer"
                           className="h-full w-full object-cover"
                         />
                         <div className="absolute top-1 right-1 rounded-md bg-emerald-500 p-0.5 text-white">
@@ -1088,28 +717,19 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
                       <div className="flex-1 text-center sm:text-left space-y-2">
                         <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                          <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5">
-                            Flyer Ready
+                          <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5">
+                            Poster Attached
                           </span>
-                          <span className="text-xs text-slate-500">Auto-read applied</span>
+                          <span className="text-xs text-slate-500">Ready for public display</span>
                         </div>
-                        <p className="text-xs text-slate-600">
-                          Flyer uploaded. All fields below are auto-filled and can be edited anytime.
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Your flyer is set. Viewers can examine this poster in full detail directly on the tournament page or in poster-only mode.
                         </p>
 
                         <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => analyzePosterWithAi(customPosterFile)}
-                            className="flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95 cursor-pointer"
-                          >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            <span>Scan Flyer to Auto-Fill</span>
-                          </button>
-
-                          <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer">
+                          <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 text-xs font-bold text-slate-800 transition-colors cursor-pointer">
                             <Upload className="h-3.5 w-3.5" />
-                            <span>Change Flyer</span>
+                            <span>Change Flyer Image</span>
                             <input
                               type="file"
                               accept="image/*"
@@ -1117,13 +737,25 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                               className="hidden"
                             />
                           </label>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomPosterFile(null);
+                              setPosterUrl(DEFAULT_POSTER_FALLBACK);
+                              setPosterUrlInput('');
+                            }}
+                            className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors cursor-pointer"
+                          >
+                            Remove
+                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
                 ) : (
                   /* Initial upload drop box */
-                  <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-orange-300 bg-orange-50/40 p-6 text-center hover:border-orange-500 hover:bg-orange-50/80 transition-all cursor-pointer">
+                  <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 text-center hover:border-orange-500 hover:bg-orange-50/20 transition-all cursor-pointer">
                     <input
                       type="file"
                       accept="image/*"
@@ -1137,10 +769,10 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       Upload Tournament Flyer / Poster
                     </p>
                     <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                      Upload tournament flyer (PNG, JPG) — auto-fill scanner reads title, dates, venue, entry fee & prizes!
+                      PNG, JPG, or WebP up to 15MB. Your poster will be shown in full high resolution to all participants.
                     </p>
-                    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white border border-orange-200 px-3 py-1 text-[11px] font-bold text-orange-600 shadow-2xs">
-                      <RefreshCw className="h-3.5 w-3.5" /> Auto-Fill Scanner Enabled
+                    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-700">
+                      Click to Browse or Drag & Drop Flyer
                     </span>
                   </div>
                 )}
@@ -1155,7 +787,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       type="url"
                       value={posterUrlInput}
                       onChange={(e) => setPosterUrlInput(e.target.value)}
-                      placeholder="https://images.unsplash.com/... or image link"
+                      placeholder="https://... or hosted image link"
                       className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                     <button
@@ -1165,12 +797,11 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                           const url = posterUrlInput.trim();
                           setPosterUrl(url);
                           setCustomPosterFile(null);
-                          analyzePosterWithAi(url);
                         }
                       }}
-                      className="rounded-xl bg-slate-800 hover:bg-slate-900 px-3 py-2 text-xs font-bold text-white transition-colors"
+                      className="rounded-xl bg-slate-900 hover:bg-slate-800 px-3.5 py-2 text-xs font-bold text-white transition-colors cursor-pointer"
                     >
-                      Apply & Scan
+                      Apply URL
                     </button>
                   </div>
                 </div>
@@ -1441,7 +1072,6 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                     ) : (
                       <input
                         type="number"
-                        min={2}
                         value={totalTeams}
                         onChange={(e) => {
                           const val = e.target.value;

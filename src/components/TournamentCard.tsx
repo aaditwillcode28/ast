@@ -20,7 +20,8 @@ import {
   Share2,
   Check,
   Building,
-  CheckCircle2
+  CheckCircle2,
+  Phone
 } from 'lucide-react';
 import { Tournament } from '../types';
 import { getEventPageUrl } from '../utils/seo';
@@ -292,24 +293,82 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
 
       {/* DETAILS SECTION BELOW POSTER */}
       <div className="flex flex-1 flex-col p-4 sm:p-5">
-        {/* Date & Time */}
+        {/* Organizer on first page (only if provided) */}
+        {tournament.hostOrg?.trim() && (
+          <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Building className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+              <span className="text-xs font-bold text-slate-800 truncate" title={tournament.hostOrg}>
+                {tournament.hostOrg}
+              </span>
+            </div>
+            {verificationBadge && (
+              <span className="rounded bg-slate-900 text-[9px] font-extrabold text-white px-1.5 py-0.5 border border-orange-500/80 shrink-0">
+                Admin
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Date & Time (only show time if provided) */}
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-600">
           <Calendar className="h-4 w-4 shrink-0 text-orange-500" />
           <span className="font-bold text-slate-800">{formattedDates}</span>
-          <span className="text-slate-300">•</span>
-          <span className="truncate">{tournament.time}</span>
+          {tournament.time?.trim() && (
+            <>
+              <span className="text-slate-300">•</span>
+              <span className="truncate">{tournament.time}</span>
+            </>
+          )}
         </div>
 
-        {/* Location & City & Province in Nepal */}
-        <div className="mb-3 flex items-start gap-2 text-xs text-slate-600">
-          <MapPin className="h-4 w-4 shrink-0 text-orange-500 mt-0.5" />
-          <div className="flex flex-col">
-            <span className="font-semibold text-slate-800 line-clamp-1">{tournament.location}</span>
-            <span className="text-slate-500">
-              {tournament.city}{tournament.province ? `, ${tournament.province} Province` : ''}, {tournament.stateCountry}
-            </span>
+        {/* Venue Location on first page (only if provided) */}
+        {(tournament.location?.trim() || tournament.city?.trim()) && (
+          <div className="mb-2.5 flex items-start gap-2 text-xs text-slate-700 bg-slate-50/80 p-2 rounded-xl border border-slate-200/60">
+            <MapPin className="h-4 w-4 shrink-0 text-orange-500 mt-0.5" />
+            <div className="flex flex-col min-w-0">
+              {tournament.location?.trim() && (
+                <span className="font-bold text-slate-900 line-clamp-1" title={tournament.location}>
+                  {tournament.location}
+                </span>
+              )}
+              {(tournament.city?.trim() || tournament.province) && (
+                <span className="text-[11px] text-slate-500 truncate">
+                  {tournament.city}{tournament.province ? `, ${tournament.province} Province` : ''}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Contact Numbers on first page (including public secondary phone, only if provided) */}
+        {(tournament.hostPhone?.trim() || tournament.hostPhoneSecondary?.trim() || tournament.secondaryPhone?.trim()) && (
+          <div className="mb-3 flex items-center flex-wrap gap-2 text-[11px]">
+            {tournament.hostPhone?.trim() && (
+              <a
+                href={`tel:${tournament.hostPhone.replace(/\s+/g, '')}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 font-semibold transition-colors"
+                title="Primary Contact Phone"
+              >
+                <Phone className="h-3 w-3 text-emerald-600" />
+                <span>{tournament.hostPhone}</span>
+              </a>
+            )}
+            {(tournament.hostPhoneSecondary?.trim() || tournament.secondaryPhone?.trim()) && (
+              <a
+                href={`tel:${(tournament.hostPhoneSecondary || tournament.secondaryPhone || '').replace(/\s+/g, '')}`}
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 font-semibold transition-colors"
+                title="Secondary / Alternate Public Phone"
+              >
+                <Phone className="h-3 w-3 text-blue-600" />
+                <span>{tournament.hostPhoneSecondary || tournament.secondaryPhone}</span>
+                <span className="text-[9px] text-blue-500">(Alt)</span>
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Transparency Info Strip on Disaster Relief & Charity Cards */}
         {isReliefOrCharity && (
@@ -324,39 +383,57 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
           </div>
         )}
 
-        {/* Specs Grid: Format, Slots, Entry Fee */}
+        {/* Specs Grid: Only display specs that are actually filled out */}
         {isNoSlotsEvent ? (
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-rose-50/70 p-2.5 border border-rose-200/80 mb-3 text-center">
-            <div>
-              <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider block">Initiative</span>
-              <span className="text-xs font-bold text-slate-900 truncate block">{tournament.type}</span>
-            </div>
+            {tournament.type?.trim() && (
+              <div>
+                <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider block">Initiative</span>
+                <span className="text-xs font-bold text-slate-900 truncate block">{tournament.type}</span>
+              </div>
+            )}
             <div>
               <span className="text-[10px] font-bold text-rose-800 uppercase tracking-wider block">Contribution</span>
               <span className="text-xs font-black text-rose-700 truncate block">Direct Public Aid</span>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-2.5 border border-slate-200/80 mb-3 text-center">
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Format</span>
-              <span className="text-xs font-bold text-orange-600 truncate block">{tournament.type}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Slots</span>
-              <span className="text-xs font-bold text-slate-800 truncate block">{totalSlotsCount} Slots</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Entry / Cost</span>
-              <span className={`text-xs font-extrabold ${tournament.entryFee === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                {tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`}
-              </span>
-            </div>
-          </div>
+          (() => {
+            const hasFormat = Boolean(tournament.type?.trim());
+            const hasSlots = Boolean(tournament.totalTeams && tournament.totalTeams > 0);
+            const hasFee = tournament.entryFee !== undefined && tournament.entryFee !== null;
+
+            if (!hasFormat && !hasSlots && !hasFee) return null;
+
+            return (
+              <div className="flex flex-wrap items-center justify-around gap-2 rounded-xl bg-slate-50 p-2.5 border border-slate-200/80 mb-3 text-center">
+                {hasFormat && (
+                  <div className="flex-1 min-w-[70px]">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Format</span>
+                    <span className="text-xs font-bold text-orange-600 truncate block">{tournament.type}</span>
+                  </div>
+                )}
+                {hasSlots && (
+                  <div className="flex-1 min-w-[70px]">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Slots</span>
+                    <span className="text-xs font-bold text-slate-800 truncate block">{tournament.totalTeams} Slots</span>
+                  </div>
+                )}
+                {hasFee && (
+                  <div className="flex-1 min-w-[70px]">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Entry / Cost</span>
+                    <span className={`text-xs font-extrabold ${tournament.entryFee === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                      {tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         )}
 
-        {/* Prize Pool or Cause */}
-        {tournament.prizePool && (
+        {/* Prize Pool or Cause (only if filled) */}
+        {tournament.prizePool?.trim() && (
           <div className={`mb-3.5 flex items-center gap-2 text-xs rounded-xl p-2.5 border ${
             (tournament.isCharity || isNoSlotsEvent)
               ? 'bg-rose-50/80 border-rose-200 text-rose-900'
@@ -373,20 +450,16 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
           </div>
         )}
 
-        {/* Metrics Row */}
+        {/* Metrics Row (No registered count) */}
         <div className="mb-3 flex items-center justify-between text-[11px] text-slate-500 px-0.5">
           <span className="flex items-center gap-1 font-medium text-slate-600">
             <Heart className={`h-3 w-3 ${isInterested ? 'text-orange-500 fill-orange-500' : 'text-slate-400'}`} />
             <span>{interestedCount} Interested</span>
           </span>
 
-          <span className="font-semibold text-slate-500">
-            {isNoSlotsEvent ? (
-              <span className="text-emerald-700 font-bold">Open Public Drive</span>
-            ) : (
-              <span>{tournament.registeredTeamsCount} / {totalSlotsCount} Registered</span>
-            )}
-          </span>
+          {isNoSlotsEvent && (
+            <span className="text-emerald-700 font-bold">Open Public Drive</span>
+          )}
         </div>
 
         {/* Registration Deadline Countdown Strip */}

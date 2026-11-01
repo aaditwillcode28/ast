@@ -23,7 +23,9 @@ import {
   Camera,
   Printer,
   HelpCircle,
-  MessageCircle
+  MessageCircle,
+  PhoneCall,
+  Phone
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Tournament, Registration } from '../types';
@@ -400,53 +402,77 @@ export const RegistrationPaymentModal: React.FC<RegistrationPaymentModalProps> =
                 </div>
               </div>
 
-              {/* Host QR Code Hero Box */}
-              <div className="rounded-2xl border-2 border-orange-200 bg-gradient-to-br from-orange-50/60 via-white to-amber-50/60 p-5 space-y-4 text-center">
-                <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider text-orange-700">
-                  <QrCode className="h-4 w-4" />
-                  <span>Host Direct Payment QR Code</span>
-                </div>
+              {/* Host QR Code Section — ONLY IF ATTACHED BY HOST */}
+              {tournament.hostPaymentQrUrl ? (
+                <div className="rounded-2xl border-2 border-red-500 bg-red-50/40 p-4 sm:p-5 space-y-4 text-center shadow-sm">
+                  {/* UNIGNORABLE CALL WARNING BANNER */}
+                  <div className="rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-orange-600 text-white p-3.5 sm:p-4 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-red-400 text-left">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-white text-red-600 flex items-center justify-center font-black shrink-0 shadow-md animate-pulse">
+                        <PhoneCall className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-display font-black text-sm uppercase tracking-wide">
+                          We suggest you call before registering
+                        </h4>
+                        <p className="text-xs text-red-100 font-medium mt-0.5">
+                          Always call the organizer to confirm team slot availability before transferring registration fees.
+                        </p>
+                      </div>
+                    </div>
+                    {(tournament.hostPhone || tournament.hostPhoneSecondary) && (
+                      <a
+                        href={`tel:${(tournament.hostPhone || tournament.hostPhoneSecondary || '').replace(/\s+/g, '')}`}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white hover:bg-slate-100 text-red-700 px-4 py-2 text-xs font-black shadow-md transition-all shrink-0 active:scale-95 text-center"
+                      >
+                        <Phone className="h-4 w-4" />
+                        <span>Call Host: {tournament.hostPhone || tournament.hostPhoneSecondary}</span>
+                      </a>
+                    )}
+                  </div>
 
-                {/* QR Code Presentation */}
-                <div className="mx-auto flex flex-col items-center justify-center">
-                  {tournament.hostPaymentQrUrl ? (
+                  <div className="flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-wider text-orange-700">
+                    <QrCode className="h-4 w-4" />
+                    <span>Host Direct Payment QR Code {hostPaymentMethod ? `(${hostPaymentMethod})` : ''}</span>
+                  </div>
+
+                  {/* QR Code Presentation */}
+                  <div className="mx-auto flex flex-col items-center justify-center">
                     <div className="p-2 bg-white rounded-2xl border border-slate-200 shadow-md">
                       <img
                         src={tournament.hostPaymentQrUrl}
                         alt="Host Payment QR Code"
                         referrerPolicy="no-referrer"
-                        className="h-48 w-48 object-contain rounded-xl"
+                        className="h-48 w-48 sm:h-56 sm:w-56 object-contain rounded-xl"
                       />
                     </div>
-                  ) : (
-                    <div className="h-44 w-44 rounded-2xl bg-white border-2 border-dashed border-orange-300 p-4 shadow-sm flex flex-col items-center justify-center text-slate-800">
-                      <QrCode className="h-20 w-20 text-slate-900 mb-1" />
-                      <span className="text-[11px] font-bold text-orange-600">{hostPaymentMethod}</span>
-                      <span className="text-[10px] text-slate-500 font-mono mt-0.5">{hostPaymentNumber}</span>
+
+                    {hostPaymentNumber && (
+                      <div className="mt-3">
+                        <span className="text-xs text-slate-500 block">Host Account / Payment ID:</span>
+                        <div className="inline-flex items-center gap-2 mt-1 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
+                          <span className="font-mono text-sm font-bold text-slate-900">{hostPaymentNumber}</span>
+                          <button
+                            type="button"
+                            onClick={handleCopyAccount}
+                            className="text-xs text-orange-600 hover:text-orange-700 font-bold flex items-center gap-1"
+                          >
+                            {copiedAccount ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                            <span>{copiedAccount ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {hostPaymentInstructions && (
+                    <div className="text-xs text-slate-600 max-w-md mx-auto bg-white/90 p-2.5 rounded-xl border border-slate-200">
+                      <span className="font-semibold text-slate-800 block">Host Instructions:</span>
+                      <p className="mt-0.5 text-slate-600">{hostPaymentInstructions}</p>
                     </div>
                   )}
-
-                  <div className="mt-3">
-                    <span className="text-xs text-slate-500 block">Host Account / Payment ID:</span>
-                    <div className="inline-flex items-center gap-2 mt-1 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs">
-                      <span className="font-mono text-sm font-bold text-slate-900">{hostPaymentNumber}</span>
-                      <button
-                        type="button"
-                        onClick={handleCopyAccount}
-                        className="text-xs text-orange-600 hover:text-orange-700 font-bold flex items-center gap-1"
-                      >
-                        {copiedAccount ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                        <span>{copiedAccount ? 'Copied' : 'Copy'}</span>
-                      </button>
-                    </div>
-                  </div>
                 </div>
-
-                <div className="text-xs text-slate-600 max-w-md mx-auto bg-white/90 p-2.5 rounded-xl border border-slate-200">
-                  <span className="font-semibold text-slate-800 block">Host Instructions:</span>
-                  <p className="mt-0.5 text-slate-600">{hostPaymentInstructions}</p>
-                </div>
-              </div>
+              ) : null}
 
               {/* Payment Verification / Transaction Code */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 space-y-3.5">

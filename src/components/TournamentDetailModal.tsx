@@ -31,7 +31,10 @@ import {
   Landmark,
   Building,
   Check,
-  Edit3
+  Edit3,
+  PhoneCall,
+  LayoutGrid,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Tournament } from '../types';
 import { formatEventDates } from '../utils/textFormat';
@@ -82,7 +85,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
   onEditTournament,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
-  const [activeTab, setActiveTab] = useState<'poster' | 'details'>('poster');
+  const [activeTab, setActiveTab] = useState<'poster' | 'details' | 'poster-only'>('poster');
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('Cancelled or fake tournament');
   const [reportDetails, setReportDetails] = useState('');
@@ -250,28 +253,46 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
           </div>
         </div>
 
-        {/* View switcher tabs */}
-        <div className="flex border-b border-slate-200 bg-slate-50/70 px-4 sm:px-6">
-          <button
-            onClick={() => setActiveTab('poster')}
-            className={`py-2.5 px-4 text-xs font-bold transition-all border-b-2 ${
-              activeTab === 'poster'
-                ? 'border-orange-500 text-orange-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Tournament Poster / Flyer
-          </button>
-          <button
-            onClick={() => setActiveTab('details')}
-            className={`py-2.5 px-4 text-xs font-bold transition-all border-b-2 ${
-              activeTab === 'details'
-                ? 'border-orange-500 text-orange-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Tournament Details & Venue
-          </button>
+        {/* DOMINANT HIGH-VISIBILITY VIEW SWITCHER TABS */}
+        <div className="bg-slate-100 p-2 sm:p-2.5 border-b-2 border-slate-200">
+          <div className="grid grid-cols-3 gap-2 max-w-2xl mx-auto">
+            <button
+              type="button"
+              onClick={() => setActiveTab('poster')}
+              className={`flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-2 sm:px-4 rounded-xl font-display font-black text-xs sm:text-sm tracking-tight transition-all cursor-pointer shadow-sm ${
+                activeTab === 'poster'
+                  ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30 ring-2 ring-orange-500'
+                  : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200'
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4 shrink-0" />
+              <span>Overview & Poster</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('details')}
+              className={`flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-2 sm:px-4 rounded-xl font-display font-black text-xs sm:text-sm tracking-tight transition-all cursor-pointer shadow-sm ${
+                activeTab === 'details'
+                  ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30 ring-2 ring-orange-500'
+                  : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200'
+              }`}
+            >
+              <MapPin className="h-4 w-4 shrink-0" />
+              <span>Details & Venue</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('poster-only')}
+              className={`flex items-center justify-center gap-1.5 sm:gap-2 py-3 px-2 sm:px-4 rounded-xl font-display font-black text-xs sm:text-sm tracking-tight transition-all cursor-pointer shadow-sm ${
+                activeTab === 'poster-only'
+                  ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30 ring-2 ring-orange-500'
+                  : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200'
+              }`}
+            >
+              <ImageIcon className="h-4 w-4 shrink-0" />
+              <span>Only Poster</span>
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Content Body */}
@@ -383,29 +404,48 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Format</span>
-                    <p className="mt-1 font-display text-lg font-bold text-orange-600 truncate">{tournament.type}</p>
-                  </div>
+                (() => {
+                  const hasFormat = Boolean(tournament.type?.trim());
+                  const hasAge = Boolean(tournament.ageGroup?.trim());
+                  const hasTeams = Boolean(tournament.totalTeams && tournament.totalTeams > 0);
+                  const hasFee = tournament.entryFee !== undefined && tournament.entryFee !== null;
 
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Age Division</span>
-                    <p className="mt-1 font-display text-lg font-bold text-slate-900 truncate">{tournament.ageGroup}</p>
-                  </div>
+                  if (!hasFormat && !hasAge && !hasTeams && !hasFee) return null;
 
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Total Teams</span>
-                    <p className="mt-1 font-display text-lg font-bold text-slate-900 truncate">{totalTeamsCount} Teams</p>
-                  </div>
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {hasFormat && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Format</span>
+                          <p className="mt-1 font-display text-base sm:text-lg font-bold text-orange-600 truncate">{tournament.type}</p>
+                        </div>
+                      )}
 
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Entry Fee</span>
-                    <p className="mt-1 font-display text-lg font-extrabold text-slate-900">
-                      {tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`}
-                    </p>
-                  </div>
-                </div>
+                      {hasAge && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Age Division</span>
+                          <p className="mt-1 font-display text-base sm:text-lg font-bold text-slate-900 truncate">{tournament.ageGroup}</p>
+                        </div>
+                      )}
+
+                      {hasTeams && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Total Teams</span>
+                          <p className="mt-1 font-display text-base sm:text-lg font-bold text-slate-900 truncate">{tournament.totalTeams} Teams</p>
+                        </div>
+                      )}
+
+                      {hasFee && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Entry Fee</span>
+                          <p className="mt-1 font-display text-base sm:text-lg font-extrabold text-slate-900">
+                            {tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               )}
 
               {/* Description (if provided) */}
@@ -579,51 +619,103 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                     <h4 className="font-bold text-sm text-slate-900">Dates & Schedule</h4>
                   </div>
                   <p className="text-sm font-bold text-slate-800">{datesFormatted}</p>
-                  <p className="text-xs text-slate-600 mt-1">
-                    {isNoSlotsEvent ? `Dispatches / Active Desks: ${tournament.time}` : `Daily Match Schedule: ${tournament.time}`}
-                  </p>
-                  {!isNoSlotsEvent && (
+                  {tournament.time?.trim() && (
+                    <p className="text-xs text-slate-600 mt-1">
+                      {isNoSlotsEvent ? `Dispatches / Active Desks: ${tournament.time}` : `Daily Match Schedule: ${tournament.time}`}
+                    </p>
+                  )}
+                  {!isNoSlotsEvent && tournament.time?.trim() && (
                     <p className="text-xs text-slate-400 mt-1">Check-in begins 30 mins prior to match time</p>
                   )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center gap-2 text-orange-600 mb-2">
-                    <MapPin className="h-5 w-5" />
-                    <h4 className="font-bold text-sm text-slate-900">Venue Location</h4>
+                {(tournament.location?.trim() || tournament.city?.trim()) && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-center gap-2 text-orange-600 mb-2">
+                      <MapPin className="h-5 w-5" />
+                      <h4 className="font-bold text-sm text-slate-900">Venue Location</h4>
+                    </div>
+                    {tournament.location?.trim() && (
+                      <p className="text-sm font-bold text-slate-800">{tournament.location}</p>
+                    )}
+                    {(tournament.city?.trim() || tournament.stateCountry) && (
+                      <p className="text-xs text-slate-600 mt-1">{tournament.city}, {tournament.stateCountry}</p>
+                    )}
+                    {tournament.location?.trim() && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <a
+                          href={`https://maps.google.com/?q=${encodeURIComponent(`${tournament.location}, ${tournament.city || 'Nepal'}`)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span>Open in Google Maps</span>
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm font-bold text-slate-800">{tournament.location}</p>
-                  <p className="text-xs text-slate-600 mt-1">{tournament.city}, {tournament.stateCountry}</p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <a
-                      href={`https://maps.google.com/?q=${encodeURIComponent(`${tournament.location}, ${tournament.city}, Nepal`)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      <span>Open in Google Maps</span>
-                    </a>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Host Payment Method / QR if specified */}
-              {tournament.hostPaymentMethod && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center gap-2 text-orange-600 mb-2">
-                    <QrCode className="h-4 w-4" />
-                    <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800">
-                      Host Payment Channel
-                    </h4>
+              {/* Host Payment QR Code ONLY IF ATTACHED BY HOST */}
+              {tournament.hostPaymentQrUrl ? (
+                <div className="rounded-2xl border-2 border-red-500 bg-red-50/40 p-4 sm:p-5 space-y-4 shadow-sm">
+                  {/* UNIGNORABLE CALL BEFORE REGISTERING WARNING BANNER */}
+                  <div className="rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-orange-600 text-white p-4 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-red-400">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-white text-red-600 flex items-center justify-center font-black shrink-0 shadow-sm animate-pulse">
+                        <PhoneCall className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-display font-black text-sm sm:text-base uppercase tracking-wide">
+                          We suggest you call before registering
+                        </h4>
+                        <p className="text-xs text-red-100 font-medium mt-0.5">
+                          Always confirm team slot availability & match venue directly with the organizer before sending payment.
+                        </p>
+                      </div>
+                    </div>
+                    {(tournament.hostPhone || tournament.hostPhoneSecondary) && (
+                      <a
+                        href={`tel:${(tournament.hostPhone || tournament.hostPhoneSecondary || '').replace(/\s+/g, '')}`}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-white hover:bg-slate-100 text-red-700 px-4 py-2 text-xs font-black shadow-sm transition-all shrink-0 active:scale-95"
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                        <span>Call Host: {tournament.hostPhone || tournament.hostPhoneSecondary}</span>
+                      </a>
+                    )}
                   </div>
-                  <div className="text-xs text-slate-700 space-y-1">
-                    <p>Method: <strong>{tournament.hostPaymentMethod}</strong></p>
-                    {tournament.hostPaymentNumber && <p>Account / ID: <strong className="font-mono">{tournament.hostPaymentNumber}</strong></p>}
-                    {tournament.hostPaymentInstructions && <p className="text-slate-500">{tournament.hostPaymentInstructions}</p>}
+
+                  {/* QR Image Presentation */}
+                  <div className="flex flex-col items-center justify-center p-4 bg-white rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-2 text-orange-600 mb-3">
+                      <QrCode className="h-5 w-5" />
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-slate-800">
+                        Host Direct Payment QR Code {tournament.hostPaymentMethod ? `(${tournament.hostPaymentMethod})` : ''}
+                      </h4>
+                    </div>
+
+                    <img
+                      src={tournament.hostPaymentQrUrl}
+                      alt="Host Payment QR Code"
+                      referrerPolicy="no-referrer"
+                      className="h-52 w-52 sm:h-60 sm:w-60 object-contain rounded-xl border border-slate-200 shadow-sm"
+                    />
+
+                    {tournament.hostPaymentNumber && (
+                      <p className="mt-3 text-xs font-mono font-bold text-slate-900 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                        Account / Number: {tournament.hostPaymentNumber}
+                      </p>
+                    )}
+                    {tournament.hostPaymentInstructions && (
+                      <p className="mt-2 text-xs text-slate-600 text-center max-w-sm">
+                        {tournament.hostPaymentInstructions}
+                      </p>
+                    )}
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Trust & Direct Payment Notice */}
               <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 space-y-1.5 shadow-2xs">
@@ -690,6 +782,50 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                       </a>
                     )}
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: SHOW ONLY THE POSTER ITSELF */}
+          {activeTab === 'poster-only' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Full Tournament Poster View
+                </span>
+                <a
+                  href={tournament.posterUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-orange-600 hover:text-orange-700"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open Full Size Image</span>
+                </a>
+              </div>
+
+              <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 flex items-center justify-center p-2 sm:p-4 shadow-lg min-h-[400px]">
+                <img
+                  src={tournament.posterUrl}
+                  alt={`${tournament.title} Poster Full`}
+                  referrerPolicy="no-referrer"
+                  className="max-h-[70vh] w-auto max-w-full object-contain rounded-xl"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
+                <div>
+                  <span className="font-bold text-slate-900 block">{tournament.title}</span>
+                  <span className="text-slate-500 text-[11px]">
+                    Hosted by {tournament.hostOrg || 'Event Organization'} • {tournament.location}, {tournament.city}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-bold">Contact: {tournament.hostPhone}</span>
+                  {(tournament.hostPhoneSecondary || tournament.secondaryPhone) && (
+                    <span className="text-slate-500">/ {tournament.hostPhoneSecondary || tournament.secondaryPhone}</span>
+                  )}
                 </div>
               </div>
             </div>

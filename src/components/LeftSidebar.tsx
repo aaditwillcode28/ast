@@ -25,7 +25,8 @@ import {
   Activity,
   Calendar,
   Navigation,
-  Globe2
+  Globe2,
+  Tv
 } from 'lucide-react';
 import { FilterState, Tournament } from '../types';
 import { PROVINCES_OF_NEPAL } from '../data/mockTournaments';
@@ -113,15 +114,17 @@ interface LeftSidebarProps {
   onFilterChange: (filters: FilterState) => void;
   onOpenHostModal: () => void;
   onOpenHostPortal: () => void;
-  onOpenRegistrationsModal: () => void;
+  onOpenRegistrationsModal?: () => void;
   onOpenInterestsModal: () => void;
   onOpenAdminHub?: () => void;
   pendingReportsCount?: number;
-  registrationsCount: number;
+  registrationsCount?: number;
   hostedCount: number;
   userInterestedIds: string[];
   userInterests: string[];
   tournaments: Tournament[];
+  activeView?: 'explore' | 'passes' | 'hosted' | 'videos';
+  setActiveView?: (view: 'explore' | 'passes' | 'hosted' | 'videos') => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
@@ -135,11 +138,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onOpenInterestsModal,
   onOpenAdminHub,
   pendingReportsCount = 0,
-  registrationsCount,
+  registrationsCount = 0,
   hostedCount,
   userInterestedIds,
   userInterests,
   tournaments,
+  activeView = 'explore',
+  setActiveView,
   isMobileOpen = false,
   onCloseMobile,
 }) => {
@@ -254,40 +259,47 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
         {/* Explore Button */}
         <button
-          onClick={handleResetToExplore}
-          className={`w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-bold transition-all ${
-            isExploreActive
+          onClick={() => {
+            if (setActiveView) setActiveView('explore');
+            handleResetToExplore();
+          }}
+          className={`w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-bold transition-all cursor-pointer ${
+            activeView === 'explore' && isExploreActive
               ? 'bg-orange-500 text-white shadow-xs'
               : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <Compass className={`h-4 w-4 ${isExploreActive ? 'text-white' : 'text-orange-500'}`} />
+            <Compass className={`h-4 w-4 ${activeView === 'explore' && isExploreActive ? 'text-white' : 'text-orange-500'}`} />
             <span>Explore Opportunities</span>
           </div>
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-            isExploreActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+            activeView === 'explore' && isExploreActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
           }`}>
             {tournaments.length}
           </span>
         </button>
 
-        {/* My Registrations Button */}
+        {/* Community Videos Button */}
         <button
-          onClick={onOpenRegistrationsModal}
-          className="w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent hover:border-slate-200 transition-all"
+          onClick={() => {
+            if (setActiveView) setActiveView('videos');
+          }}
+          className={`w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-bold transition-all cursor-pointer ${
+            activeView === 'videos'
+              ? 'bg-orange-500 text-white shadow-xs'
+              : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+          }`}
         >
           <div className="flex items-center gap-2.5">
-            <Ticket className="h-4 w-4 text-orange-500" />
-            <span>My Registrations</span>
+            <Tv className={`h-4 w-4 ${activeView === 'videos' ? 'text-white' : 'text-orange-500'}`} />
+            <span>Community Videos</span>
           </div>
-          {registrationsCount > 0 ? (
-            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1.5 text-[11px] font-extrabold text-white">
-              {registrationsCount}
-            </span>
-          ) : (
-            <span className="text-[10px] font-semibold text-slate-400">Slips</span>
-          )}
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+            activeView === 'videos' ? 'bg-white/20 text-white' : 'bg-red-100 text-red-600'
+          }`}>
+            Watch
+          </span>
         </button>
 
         {/* My Interests / Bookmarks Button */}

@@ -10,6 +10,7 @@ import { HostPortalModal } from './components/HostPortalModal';
 import { RegisterInterestsModal } from './components/RegisterInterestsModal';
 import { AdminHubModal } from './components/AdminHubModal';
 import { NepalLegalComplianceModal } from './components/NepalLegalComplianceModal';
+import { VideosSection } from './components/VideosSection';
 import { Tournament, Registration, FilterState } from './types';
 import { INITIAL_TOURNAMENTS, isDemoTournament, DEMO_EVENT_IDS } from './data/mockTournaments';
 import { trackPageImpression, logActivity, getEventReports, isAdminAuthenticated } from './utils/activityTracker';
@@ -241,7 +242,6 @@ export default function App() {
   const [selectedTournamentDetail, setSelectedTournamentDetail] = useState<Tournament | null>(null);
   const [selectedTournamentRegister, setSelectedTournamentRegister] = useState<Tournament | null>(null);
   const [isHostModalOpen, setIsHostModalOpen] = useState(false);
-  const [isPassesModalOpen, setIsPassesModalOpen] = useState(false);
   const [isHostPortalOpen, setIsHostPortalOpen] = useState(false);
   const [isInterestsModalOpen, setIsInterestsModalOpen] = useState(false);
   const [isAdminHubOpen, setIsAdminHubOpen] = useState(false);
@@ -249,7 +249,7 @@ export default function App() {
   const [isAdminAuth, setIsAdminAuth] = useState(() => isAdminAuthenticated());
   const [pendingReportsCount, setPendingReportsCount] = useState(0);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
-  const [activeView, setActiveView] = useState<'explore' | 'passes' | 'hosted'>('explore');
+  const [activeView, setActiveView] = useState<'explore' | 'passes' | 'hosted' | 'videos'>('explore');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hostModalCategory, setHostModalCategory] = useState<string | undefined>(undefined);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -947,13 +947,10 @@ export default function App() {
           setHostModalCategory(undefined);
           setIsHostModalOpen(true);
         }}
-        onOpenRegistrationsModal={() => setIsPassesModalOpen(true)}
-        onOpenPassesModal={() => setIsPassesModalOpen(true)}
         onOpenHostPortal={() => setIsHostPortalOpen(true)}
         onOpenInterestsModal={() => setIsInterestsModalOpen(true)}
         onOpenAdminHub={() => setIsAdminHubOpen(true)}
         pendingReportsCount={pendingReportsCount}
-        registrationsCount={registrations.length}
         hostedCount={userHostedTournaments.length}
         activeView={activeView}
         setActiveView={setActiveView}
@@ -974,23 +971,26 @@ export default function App() {
               setIsHostModalOpen(true);
             }}
             onOpenHostPortal={() => setIsHostPortalOpen(true)}
-            onOpenRegistrationsModal={() => setIsPassesModalOpen(true)}
             onOpenInterestsModal={() => setIsInterestsModalOpen(true)}
             onOpenAdminHub={() => setIsAdminHubOpen(true)}
             pendingReportsCount={pendingReportsCount}
-            registrationsCount={registrations.length}
             hostedCount={userHostedTournaments.length}
             userInterestedIds={interestedEventIds}
             userInterests={userInterests}
             tournaments={tournaments}
+            activeView={activeView}
+            setActiveView={setActiveView}
             isMobileOpen={isMobileFiltersOpen}
             onCloseMobile={() => setIsMobileFiltersOpen(false)}
           />
 
           {/* MAIN OPPORTUNITY FEED (DIRECT DISCOVERY - NO ROADBLOCKS) */}
           <main className="w-full flex-1 min-w-0 space-y-4 sm:space-y-5">
-            
-            {/* 1. UNSTOP-STYLE HORIZONTAL CATEGORY PILL STRIP (STICKY SEARCH & FILTERS ON SCROLL) */}
+            {activeView === 'videos' ? (
+              <VideosSection onBackToExplore={() => setActiveView('explore')} />
+            ) : (
+              <>
+                {/* 1. UNSTOP-STYLE HORIZONTAL CATEGORY PILL STRIP (STICKY SEARCH & FILTERS ON SCROLL) */}
             <div className="sticky top-16 z-30 bg-slate-50/95 backdrop-blur-md pt-2 pb-2.5 -mx-3 px-3 sm:mx-0 sm:px-0 border-b border-slate-200/60 transition-all">
               {/* Compact Mobile Search Input (Visible only on mobile devices) */}
               <div className="sm:hidden mb-2 px-0.5">
@@ -1349,6 +1349,8 @@ export default function App() {
                 ))}
               </div>
             )}
+              </>
+            )}
           </main>
         </div>
       </div>
@@ -1412,18 +1414,6 @@ export default function App() {
         />
       )}
 
-      {/* 5. My Passes & Digital QR Codes Modal */}
-      {isPassesModalOpen && (
-        <MyPassesModal
-          isOpen={isPassesModalOpen}
-          onClose={() => setIsPassesModalOpen(false)}
-          registrations={registrations}
-          onExploreClick={() => {
-            const element = document.getElementById('tournaments-grid-section');
-            element?.scrollIntoView({ behavior: 'smooth' });
-          }}
-        />
-      )}
 
       {/* 6. Host Portal & Organizer Dashboard Modal */}
       {isHostPortalOpen && (

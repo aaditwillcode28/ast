@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlusCircle, Search, X, Activity } from 'lucide-react';
+import { PlusCircle, Search, X, Activity, Compass, Tv, Film } from 'lucide-react';
 import { KataTiraLogo } from './KataTiraLogo';
 
 interface NavbarProps {
@@ -12,8 +12,8 @@ interface NavbarProps {
   pendingReportsCount?: number;
   registrationsCount: number;
   hostedCount: number;
-  activeView: 'explore' | 'passes' | 'hosted';
-  setActiveView: (view: 'explore' | 'passes' | 'hosted') => void;
+  activeView: 'explore' | 'passes' | 'hosted' | 'videos';
+  setActiveView: (view: 'explore' | 'passes' | 'hosted' | 'videos') => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
 }
@@ -22,6 +22,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenHostModal,
   onOpenAdminHub,
   pendingReportsCount = 0,
+  activeView,
+  setActiveView,
   searchQuery = '',
   onSearchChange,
 }) => {
@@ -73,11 +75,39 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
 
+        {/* NAVIGATION VIEW SWITCHER: Tournaments vs Videos */}
+        <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveView('explore')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeView === 'explore'
+                ? 'bg-white text-slate-900 shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Compass className="h-3.5 w-3.5 text-orange-500" />
+            <span>Tournaments</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveView('videos')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeView === 'videos'
+                ? 'bg-orange-500 text-white shadow-2xs font-extrabold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Tv className="h-3.5 w-3.5" />
+            <span>Videos</span>
+          </button>
+        </div>
+
         {/* RIGHT SIDE: Host Tournament CTA */}
         <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 border-r border-slate-200 pr-3">
+          <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500 border-r border-slate-200 pr-3">
             <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
-            <span className="font-medium">Kathmandu, Pokhara & Nationwide</span>
+            <span className="font-medium">Kathmandu & Nationwide</span>
           </div>
 
 
