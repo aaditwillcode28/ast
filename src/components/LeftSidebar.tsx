@@ -162,6 +162,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   }, [tournaments]);
 
   const handleCategorySelect = (catId: string) => {
+    if (setActiveView) setActiveView('explore');
     onFilterChange({
       ...filters,
       category: catId === 'All' ? 'all' : catId,
@@ -171,6 +172,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const handleSelectCharityRelief = () => {
+    if (setActiveView) setActiveView('explore');
     onFilterChange({
       ...filters,
       category: 'Charity & Relief',
@@ -179,6 +181,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const handleResetToExplore = () => {
+    if (setActiveView) setActiveView('explore');
     onFilterChange({
       ...filters,
       category: 'all',
@@ -189,6 +192,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const toggleOnlyInterested = () => {
+    if (setActiveView) setActiveView('explore');
     onFilterChange({
       ...filters,
       onlyInterested: !filters.onlyInterested,
@@ -196,6 +200,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const toggleOnlyFree = () => {
+    if (setActiveView) setActiveView('explore');
     onFilterChange({
       ...filters,
       onlyFree: !filters.onlyFree,
@@ -203,6 +208,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const handleCitySelect = (city: string) => {
+    if (setActiveView) setActiveView('explore');
     onFilterChange({
       ...filters,
       type: city === 'All Cities' ? 'all' : city,

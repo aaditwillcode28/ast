@@ -90,9 +90,24 @@ const CATEGORY_TABS = [
   { id: 'Charity & Relief', label: 'Disaster Relief', icon: HeartHandshake, isRelief: true },
 ];
 
-// Helper to detect test/dummy placeholder listings (e.g. empty or corrupt data)
+// Helper to detect test/dummy placeholder listings and ensure community videos are strictly isolated to Videos page
 export const isTestOrPlaceholderTournament = (item: any): boolean => {
   if (!item || !item.title) return true;
+  // Videos must strictly and exclusively appear in the Videos section
+  if (
+    item.category === 'COMMUNITY_VIDEO' ||
+    item.category?.toLowerCase() === 'community_video' ||
+    (typeof item.id === 'string' && item.id.startsWith('vid-')) ||
+    Boolean(item.videoUrl) ||
+    Boolean(item.youtubeUrl) ||
+    Boolean(item.youtubeId) ||
+    item.type === 'youtube' ||
+    item.type === 'facebook' ||
+    item.type === 'instagram' ||
+    item.type === 'tiktok'
+  ) {
+    return true;
+  }
   return false;
 };
 
@@ -253,6 +268,21 @@ export default function App() {
   const [hostModalCategory, setHostModalCategory] = useState<string | undefined>(undefined);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
+  // Startup sweep: ensure any legacy community video items or deleted items are purged from tournament state
+  useEffect(() => {
+    setTournaments((prev) => {
+      const filtered = prev.filter((t) => !isTestOrPlaceholderTournament(t) && !isDemoTournament(t));
+      if (filtered.length !== prev.length) {
+        try {
+          localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(filtered));
+        } catch {}
+      }
+      return filtered;
+    });
+    setHostedTournamentIds((prev) => prev.filter((id) => !id.startsWith('vid-')));
+    setInterestedEventIds((prev) => prev.filter((id) => !id.startsWith('vid-')));
+  }, []);
+
   // Synchronize category state & event detail page with browser URL, history navigation, and Google SEO tags
   useEffect(() => {
     // If an individual event modal/page is open, synchronize its unique URL (?event=ID)
@@ -378,34 +408,37 @@ export default function App() {
         setTournaments((prev) => {
           const map = new Map<string, Tournament>();
 
-          // Cloud active tournaments are authoritative
+          // Cloud active tournaments are authoritative (videos strictly excluded)
           activeTournaments
-            .filter((t) => !isDemoTournament(t) && !deletedSet.has(t.id))
+            .filter((t) => !isDemoTournament(t) && !isTestOrPlaceholderTournament(t) && !deletedSet.has(t.id))
             .forEach((t) => map.set(t.id, t));
 
           // Retain local listings only if created within the last 45 seconds on this device (optimistic UI)
           const now = Date.now();
           prev.forEach((t) => {
+            if (isTestOrPlaceholderTournament(t) || isDemoTournament(t)) return;
             const age = now - (new Date(t.createdAt).getTime() || 0);
-            if (age < 45000 && !deletedSet.has(t.id) && !isDemoTournament(t)) {
+            if (age < 45000 && !deletedSet.has(t.id)) {
               if (!map.has(t.id)) {
                 map.set(t.id, t);
               }
             }
           });
 
-          const finalList = Array.from(map.values());
+          const finalList = Array.from(map.values()).filter(
+            (t) => !isTestOrPlaceholderTournament(t) && !isDemoTournament(t)
+          );
           try {
             localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(finalList));
           } catch {}
           return finalList;
         });
 
-        // 3. Clean up deleted tournaments from other states on this device
+        // 3. Clean up deleted tournaments and video IDs from other states on this device
         if (deletedIds.length > 0) {
-          setHostedTournamentIds((prev) => prev.filter((id) => !deletedSet.has(id)));
-          setInterestedEventIds((prev) => prev.filter((id) => !deletedSet.has(id)));
-          setRegistrations((prev) => prev.filter((r) => !deletedSet.has(r.tournamentId)));
+          setHostedTournamentIds((prev) => prev.filter((id) => !deletedSet.has(id) && !id.startsWith('vid-')));
+          setInterestedEventIds((prev) => prev.filter((id) => !deletedSet.has(id) && !id.startsWith('vid-')));
+          setRegistrations((prev) => prev.filter((r) => !deletedSet.has(r.tournamentId) && !r.tournamentId?.startsWith('vid-')));
         }
 
         // 4. Authoritative multi-device registrations sync
@@ -954,7 +987,12 @@ export default function App() {
         activeView={activeView}
         setActiveView={setActiveView}
         searchQuery={filters.searchQuery}
-        onSearchChange={(query) => setFilters({ ...filters, searchQuery: query })}
+        onSearchChange={(query) => {
+          if (activeView === 'videos' && query) {
+            setActiveView('explore');
+          }
+          setFilters({ ...filters, searchQuery: query });
+        }}
       />
 
       {/* MAIN CONTAINER: UNSTOP-STYLE CLEAN DISCOVERY LAYOUT */}
@@ -1023,6 +1061,7 @@ export default function App() {
                     <button
                       key={tab.id}
                       onClick={() => {
+                        setActiveView('explore');
                         setFilters({
                           ...filters,
                           category: tab.id,

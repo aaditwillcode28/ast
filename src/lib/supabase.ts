@@ -51,8 +51,17 @@ export const fetchCloudTournamentsWithDeleted = async (): Promise<CloudSyncResul
     const activeTournaments: Tournament[] = [];
 
     for (const row of data) {
-      if (row.status === 'deleted' || row.category === 'COMMUNITY_VIDEO') {
-        if (row.status === 'deleted') {
+      const isVideoRow =
+        row.category === 'COMMUNITY_VIDEO' ||
+        row.category?.toLowerCase() === 'community_video' ||
+        (typeof row.id === 'string' && row.id.startsWith('vid-')) ||
+        row.format === 'youtube' ||
+        row.format === 'facebook' ||
+        row.format === 'instagram' ||
+        row.format === 'tiktok';
+
+      if (row.status === 'deleted' || isVideoRow) {
+        if (row.status === 'deleted' || isVideoRow) {
           deletedIds.push(row.id);
         }
         continue;
