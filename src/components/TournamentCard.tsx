@@ -128,7 +128,6 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
 
   const totalSlotsCount = tournament.totalTeams || tournament.totalSlots || 16;
   const CategoryIcon = getCategoryIcon(tournament.category);
-  const interestedCount = (tournament.interestedCount || 0) + (isInterested ? 1 : 0);
   const verificationBadge = getHostVerificationBadge(tournament);
 
   const handleWhatsAppShare = (e: React.MouseEvent) => {
@@ -449,18 +448,6 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
             </span>
           </div>
         )}
-
-        {/* Metrics Row (No registered count) */}
-        <div className="mb-3 flex items-center justify-between text-[11px] text-slate-500 px-0.5">
-          <span className="flex items-center gap-1 font-medium text-slate-600">
-            <Heart className={`h-3 w-3 ${isInterested ? 'text-orange-500 fill-orange-500' : 'text-slate-400'}`} />
-            <span>{interestedCount} Interested</span>
-          </span>
-
-          {isNoSlotsEvent && (
-            <span className="text-emerald-700 font-bold">Open Public Drive</span>
-          )}
-        </div>
 
         {/* Registration Deadline Countdown Strip */}
         {tournament.registrationDeadline && (

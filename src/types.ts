@@ -189,10 +189,14 @@ export interface OrganizerProfile {
   notes?: string;
 }
 
+export type VideoPlatform = 'youtube' | 'facebook' | 'instagram' | 'tiktok' | 'other';
+
 export interface CommunityVideo {
   id: string;
-  youtubeUrl: string;
-  youtubeId: string;
+  videoUrl: string;
+  youtubeUrl?: string; // backwards compatibility
+  youtubeId?: string;
+  platform: VideoPlatform;
   title: string;
   channelName: string;
   thumbnailUrl: string;

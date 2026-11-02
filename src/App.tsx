@@ -5,7 +5,6 @@ import { TournamentCard } from './components/TournamentCard';
 import { TournamentDetailModal } from './components/TournamentDetailModal';
 import { HostTournamentModal } from './components/HostTournamentModal';
 import { RegistrationPaymentModal } from './components/RegistrationPaymentModal';
-import { MyPassesModal } from './components/MyPassesModal';
 import { HostPortalModal } from './components/HostPortalModal';
 import { RegisterInterestsModal } from './components/RegisterInterestsModal';
 import { AdminHubModal } from './components/AdminHubModal';

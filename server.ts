@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
@@ -213,6 +214,79 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
         success: false,
         message: err.message || 'Security verification error',
       });
+    }
+  });
+
+  // ==========================================
+  // API: Cross-Device Community Videos (Multi-Platform)
+  // ==========================================
+  const videosFilePath = path.resolve(__dirname, 'src', 'data', 'community_videos.json');
+
+  async function readVideosFromFile(): Promise<any[]> {
+    try {
+      if (!fs.existsSync(videosFilePath)) {
+        await fs.promises.writeFile(videosFilePath, '[]', 'utf-8');
+        return [];
+      }
+      const raw = await fs.promises.readFile(videosFilePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      console.error('Error reading community_videos.json:', err);
+      return [];
+    }
+  }
+
+  async function writeVideosToFile(videos: any[]): Promise<void> {
+    try {
+      await fs.promises.writeFile(videosFilePath, JSON.stringify(videos, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Error writing community_videos.json:', err);
+    }
+  }
+
+  // GET /api/videos - returns all community videos across devices
+  app.get('/api/videos', async (_req, res) => {
+    try {
+      const videos = await readVideosFromFile();
+      return res.json({ success: true, videos });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // POST /api/videos - saves a new video across devices
+  app.post('/api/videos', async (req, res) => {
+    try {
+      const newVideo = req.body;
+      if (!newVideo || !newVideo.title || !newVideo.videoUrl) {
+        return res.status(400).json({ success: false, error: 'Title and videoUrl are required' });
+      }
+      const existing = await readVideosFromFile();
+      const videoRecord = {
+        ...newVideo,
+        id: newVideo.id || `vid-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        createdAt: newVideo.createdAt || new Date().toISOString().split('T')[0],
+      };
+      // Prepend so latest videos appear first
+      const updated = [videoRecord, ...existing.filter((v: any) => v.id !== videoRecord.id)];
+      await writeVideosToFile(updated);
+      return res.json({ success: true, video: videoRecord, videos: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // DELETE /api/videos/:id - deletes a video across devices
+  app.delete('/api/videos/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await readVideosFromFile();
+      const updated = existing.filter((v: any) => v.id !== id);
+      await writeVideosToFile(updated);
+      return res.json({ success: true, message: 'Video removed successfully', videos: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
     }
   });
 
