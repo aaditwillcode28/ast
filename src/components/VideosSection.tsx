@@ -18,10 +18,16 @@ import {
   Camera,
   Radio,
   CloudCheck,
-  Check
+  Check,
+  ShieldCheck,
+  ShieldAlert,
+  Lock,
+  Unlock,
+  KeyRound
 } from 'lucide-react';
 import { CommunityVideo, VideoPlatform } from '../types';
 import { fetchCloudVideos, publishCloudVideo, deleteCloudVideo } from '../lib/supabase';
+import { isAdminAuthenticated, verifyAdminPin, logActivity, clearAdminSession } from '../utils/activityTracker';
 
 const STORAGE_KEY = 'katatira_community_videos_v1';
 
@@ -62,9 +68,33 @@ export const detectPlatform = (url: string): VideoPlatform => {
 
 interface VideosSectionProps {
   onBackToExplore?: () => void;
+  isAdmin?: boolean;
 }
 
-export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore }) => {
+export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, isAdmin: propIsAdmin }) => {
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    if (typeof propIsAdmin === 'boolean') return propIsAdmin;
+    return isAdminAuthenticated();
+  });
+  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pendingDeleteVideoId, setPendingDeleteVideoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof propIsAdmin === 'boolean') {
+      setIsAdmin(propIsAdmin);
+    }
+  }, [propIsAdmin]);
+
+  useEffect(() => {
+    const handleAuthChange = (e: any) => {
+      setIsAdmin(Boolean(e.detail?.authenticated));
+    };
+    window.addEventListener('katatira_admin_auth_changed', handleAuthChange);
+    return () => window.removeEventListener('katatira_admin_auth_changed', handleAuthChange);
+  }, []);
+
   const [videos, setVideos] = useState<CommunityVideo[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -286,31 +316,55 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
     }
   };
 
-  const handleDeleteVideo = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (window.confirm('Are you sure you want to remove this video from all devices?')) {
-      // Optimistic delete
-      setVideos((prev) => prev.filter((v) => v.id !== id));
-      if (activeVideoModal?.id === id) {
-        setActiveVideoModal(null);
-      }
+  const executeDeleteVideo = async (id: string) => {
+    const videoToDelete = videos.find((v) => v.id === id);
+    // Optimistic delete
+    setVideos((prev) => prev.filter((v) => v.id !== id));
+    if (activeVideoModal?.id === id) {
+      setActiveVideoModal(null);
+    }
 
-      // 1. Delete from Supabase Cloud
-      try {
-        await deleteCloudVideo(id);
-      } catch (err) {
-        console.warn('Cloud delete notice:', err);
-      }
+    // 1. Delete from Supabase Cloud
+    try {
+      await deleteCloudVideo(id);
+    } catch (err) {
+      console.warn('Cloud delete notice:', err);
+    }
 
-      // 2. Delete from Server endpoint
-      try {
-        await fetch(`/api/videos/${id}`, { method: 'DELETE' });
-      } catch (err) {
-        console.warn('Server delete notice:', err);
-      }
+    // 2. Delete from Server endpoint
+    try {
+      await fetch(`/api/videos/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('Server delete notice:', err);
+    }
 
-      // 3. Re-sync
-      fetchAllVideos(true);
+    // 3. Log administrator activity
+    logActivity({
+      type: 'tournament_delete',
+      actor: 'Administrator',
+      action: 'Deleted community video',
+      targetTitle: videoToDelete?.title || 'Community Video',
+      targetId: id,
+      details: `Channel: ${videoToDelete?.channelName || 'N/A'} | Platform: ${videoToDelete?.platform || 'youtube'}`,
+      severity: 'warning',
+    });
+
+    // 4. Re-sync
+    fetchAllVideos(true);
+  };
+
+  const handleDeleteVideo = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    // Strictly enforce admin authentication
+    if (!isAdmin && !isAdminAuthenticated()) {
+      setPendingDeleteVideoId(id);
+      setIsAdminPinModalOpen(true);
+      return;
+    }
+
+    if (window.confirm('Admin Confirmation: Are you sure you want to permanently remove this video from all devices?')) {
+      await executeDeleteVideo(id);
     }
   };
 
@@ -426,6 +480,37 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
               <PlusCircle className="h-4 w-4" />
               <span>Link Video / Stream</span>
             </button>
+
+            {isAdmin ? (
+              <div className="flex items-center gap-1.5 rounded-xl bg-slate-950/80 border border-orange-500/80 px-3 py-2 text-xs font-bold text-white shadow-xs">
+                <ShieldCheck className="h-3.5 w-3.5 text-orange-400" />
+                <span>Admin</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearAdminSession();
+                    setIsAdmin(false);
+                  }}
+                  className="ml-1 p-0.5 rounded text-slate-400 hover:text-white"
+                  title="Lock admin session"
+                >
+                  <Lock className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingDeleteVideoId(null);
+                  setIsAdminPinModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Admin Moderation"
+              >
+                <Lock className="h-3 w-3 text-slate-400" />
+                <span>Admin</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -596,14 +681,17 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
                       <span>Watch</span>
                     </a>
 
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteVideo(video.id, e)}
-                      className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors"
-                      title="Remove video from all devices"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteVideo(video.id, e)}
+                        className="flex items-center gap-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 px-1.5 py-1 rounded-md transition-colors border border-transparent hover:border-rose-200"
+                        title="Delete video (Admin only)"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                        <span className="text-[10px] font-bold text-rose-600">Delete</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -920,6 +1008,18 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
               </div>
 
               <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteVideo(activeVideoModal.id)}
+                    className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-xs font-bold transition-colors shadow-xs"
+                    title="Permanently remove video as administrator"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Delete Video (Admin)</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -934,6 +1034,101 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: ADMIN PIN AUTHORIZATION MODAL */}
+      {isAdminPinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 text-white shadow-2xl relative">
+            <button
+              onClick={() => {
+                setIsAdminPinModalOpen(false);
+                setPinInput('');
+                setPinError('');
+                setPendingDeleteVideoId(null);
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-base text-white">Admin Authorization</h3>
+                <p className="text-xs text-slate-400">Only administrators can delete videos.</p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (verifyAdminPin(pinInput)) {
+                  setIsAdmin(true);
+                  setIsAdminPinModalOpen(false);
+                  const toDelete = pendingDeleteVideoId;
+                  setPendingDeleteVideoId(null);
+                  setPinInput('');
+                  setPinError('');
+                  if (toDelete) {
+                    if (window.confirm('Admin Confirmation: Are you sure you want to permanently remove this video from all devices?')) {
+                      executeDeleteVideo(toDelete);
+                    }
+                  }
+                } else {
+                  setPinError('Incorrect Admin Passcode.');
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Enter Admin Passcode / PIN
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <input
+                    type="password"
+                    value={pinInput}
+                    onChange={(e) => {
+                      setPinInput(e.target.value);
+                      setPinError('');
+                    }}
+                    placeholder="Enter admin passcode"
+                    autoFocus
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+                {pinError && (
+                  <p className="text-xs text-rose-400 mt-1 font-semibold">{pinError}</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdminPinModalOpen(false);
+                    setPinInput('');
+                    setPinError('');
+                    setPendingDeleteVideoId(null);
+                  }}
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 text-xs font-bold text-white shadow-xs"
+                >
+                  Verify & Proceed
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

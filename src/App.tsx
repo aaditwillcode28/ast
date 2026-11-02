@@ -1024,7 +1024,10 @@ export default function App() {
           {/* MAIN OPPORTUNITY FEED (DIRECT DISCOVERY - NO ROADBLOCKS) */}
           <main className="w-full flex-1 min-w-0 space-y-4 sm:space-y-5">
             {activeView === 'videos' ? (
-              <VideosSection onBackToExplore={() => setActiveView('explore')} />
+              <VideosSection
+                onBackToExplore={() => setActiveView('explore')}
+                isAdmin={isAdminAuth}
+              />
             ) : (
               <>
                 {/* 1. UNSTOP-STYLE HORIZONTAL CATEGORY PILL STRIP (STICKY SEARCH & FILTERS ON SCROLL) */}
