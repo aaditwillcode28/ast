@@ -16,9 +16,12 @@ import {
   Globe,
   Film,
   Camera,
-  Radio
+  Radio,
+  CloudCheck,
+  Check
 } from 'lucide-react';
 import { CommunityVideo, VideoPlatform } from '../types';
+import { fetchCloudVideos, publishCloudVideo, deleteCloudVideo } from '../lib/supabase';
 
 const STORAGE_KEY = 'katatira_community_videos_v1';
 
@@ -82,7 +85,8 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
     return [];
   });
 
-  const [isLoadingServer, setIsLoadingServer] = useState(false);
+  const [isLoadingSync, setIsLoadingSync] = useState(false);
+  const [justSynced, setJustSynced] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,40 +103,71 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync from Server (/api/videos) for true cross-device synchronization (Device A -> Device B)
-  const fetchServerVideos = useCallback(async () => {
-    setIsLoadingServer(true);
+  // Sync from Global Supabase Cloud + Server API for Guaranteed Cross-Device Visibility (Device A ⇄ Device B)
+  const fetchAllVideos = useCallback(async (silent = false) => {
+    if (!silent) setIsLoadingSync(true);
     try {
-      const res = await fetch('/api/videos');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.videos)) {
-          // Normalize and clean demo items
-          const cleaned = data.videos.filter(
-            (v: any) =>
-              v.id &&
-              !v.id.startsWith('vid-futsal-final') &&
-              !v.id.startsWith('vid-esports-nepal') &&
-              !v.id.startsWith('vid-basketball-3v3') &&
-              !v.id.startsWith('vid-debate-mun')
-          );
-          setVideos(cleaned);
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
-          } catch {}
+      // 1. Primary: Direct Supabase Cloud Database (works across separate containers, devices, and networks)
+      const cloudVideos = await fetchCloudVideos();
+
+      // 2. Secondary: Server API Endpoint
+      let serverVideos: CommunityVideo[] = [];
+      try {
+        const res = await fetch('/api/videos');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.videos)) {
+            serverVideos = data.videos;
+          }
         }
+      } catch (err) {
+        // Offline / serverless fallback
+      }
+
+      // Merge cloud and server items, deduplicating by ID
+      const mergedMap = new Map<string, CommunityVideo>();
+      [...cloudVideos, ...serverVideos].forEach((v) => {
+        if (
+          v &&
+          v.id &&
+          v.title &&
+          v.videoUrl &&
+          !v.id.startsWith('vid-futsal-final') &&
+          !v.id.startsWith('vid-esports-nepal') &&
+          !v.id.startsWith('vid-basketball-3v3') &&
+          !v.id.startsWith('vid-debate-mun')
+        ) {
+          mergedMap.set(v.id, v);
+        }
+      });
+
+      const mergedList = Array.from(mergedMap.values());
+      setVideos(mergedList);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedList));
+      } catch {}
+
+      if (!silent) {
+        setJustSynced(true);
+        setTimeout(() => setJustSynced(false), 2000);
       }
     } catch (err) {
-      console.warn('Could not fetch community videos from server:', err);
+      console.warn('Could not sync community videos:', err);
     } finally {
-      setIsLoadingServer(false);
+      if (!silent) setIsLoadingSync(false);
     }
   }, []);
 
-  // Fetch on mount
+  // Fetch on mount and set up 6-second polling so Device B immediately sees videos added from Device A
   useEffect(() => {
-    fetchServerVideos();
-  }, [fetchServerVideos]);
+    fetchAllVideos();
+
+    const interval = setInterval(() => {
+      fetchAllVideos(true);
+    }, 6000);
+
+    return () => clearInterval(interval);
+  }, [fetchAllVideos]);
 
   // Derived current platform from input
   const detectedInputPlatform = detectPlatform(videoUrlInput);
@@ -212,26 +247,30 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
 
     setIsSubmitting(true);
     try {
-      // 1. Post to Server API for cross-device visibility
-      const res = await fetch('/api/videos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newVideo),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.videos) {
-          setVideos(data.videos);
-        } else {
-          setVideos((prev) => [newVideo, ...prev]);
-        }
-      } else {
-        // Fallback to local state if server fails
-        setVideos((prev) => [newVideo, ...prev]);
+      // 1. Publish to Supabase Cloud Database (Guaranteed Cross-Device Storage)
+      const cloudRes = await publishCloudVideo(newVideo);
+      if (!cloudRes.success) {
+        console.warn('Cloud video notice:', cloudRes.error);
       }
+
+      // 2. Also post to Server API endpoint
+      try {
+        await fetch('/api/videos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newVideo),
+        });
+      } catch (err) {
+        console.warn('Server endpoint notice:', err);
+      }
+
+      // 3. Immediately update local state
+      setVideos((prev) => [newVideo, ...prev.filter((v) => v.id !== newVideo.id)]);
+
+      // 4. Trigger cloud re-sync
+      fetchAllVideos(true);
     } catch (err) {
-      console.warn('Server sync failed, keeping local copy:', err);
+      console.warn('Video addition error:', err);
       setVideos((prev) => [newVideo, ...prev]);
     } finally {
       setIsSubmitting(false);
@@ -249,18 +288,29 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
 
   const handleDeleteVideo = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to remove this video link from all devices?')) {
+    if (window.confirm('Are you sure you want to remove this video from all devices?')) {
       // Optimistic delete
       setVideos((prev) => prev.filter((v) => v.id !== id));
       if (activeVideoModal?.id === id) {
         setActiveVideoModal(null);
       }
 
+      // 1. Delete from Supabase Cloud
+      try {
+        await deleteCloudVideo(id);
+      } catch (err) {
+        console.warn('Cloud delete notice:', err);
+      }
+
+      // 2. Delete from Server endpoint
       try {
         await fetch(`/api/videos/${id}`, { method: 'DELETE' });
       } catch (err) {
-        console.warn('Failed to delete from server:', err);
+        console.warn('Server delete notice:', err);
       }
+
+      // 3. Re-sync
+      fetchAllVideos(true);
     }
   };
 
@@ -336,8 +386,9 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
                 <Film className="h-3.5 w-3.5" />
                 <span>YouTube, Facebook, Instagram & Streams</span>
               </span>
-              <span className="text-xs text-slate-300 font-mono">
-                {videos.length} Videos Synced Across Devices
+              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-mono bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Live Cloud Sync Active</span>
               </span>
             </div>
             <h1 className="font-display text-2xl sm:text-3xl font-black text-white tracking-tight">
@@ -350,13 +401,22 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
 
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <button
-              onClick={fetchServerVideos}
-              disabled={isLoadingServer}
-              className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3 py-2 text-xs font-semibold text-white transition-colors cursor-pointer"
-              title="Sync videos from server"
+              onClick={() => fetchAllVideos(false)}
+              disabled={isLoadingSync}
+              className="flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-3.5 py-2 text-xs font-semibold text-white transition-colors cursor-pointer active:scale-95"
+              title="Sync latest videos from cloud"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoadingServer ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Sync</span>
+              {justSynced ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Synced!</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className={`h-3.5 w-3.5 ${isLoadingSync ? 'animate-spin' : ''}`} />
+                  <span>Sync Cloud</span>
+                </>
+              )}
             </button>
 
             <button
@@ -440,7 +500,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
             No Videos Found in This Category
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            Be the first to share an official tournament replay, match highlight, or stream by submitting a link from YouTube, Facebook, Instagram, or TikTok! It will be instantly viewable on all devices.
+            Be the first to share an official tournament replay, match highlight, or stream by submitting a link from YouTube, Facebook, Instagram, or TikTok! It will be instantly viewable across all devices via live cloud sync.
           </p>
           <button
             onClick={() => setIsAddModalOpen(true)}
@@ -739,7 +799,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore })
                   disabled={isSubmitting}
                   className="rounded-xl bg-orange-500 hover:bg-orange-600 px-5 py-2 text-xs font-bold text-white shadow-md shadow-orange-500/30 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Syncing to Server...' : 'Publish Video Link'}
+                  {isSubmitting ? 'Syncing to Cloud...' : 'Publish Video Link'}
                 </button>
               </div>
             </form>

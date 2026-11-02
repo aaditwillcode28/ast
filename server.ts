@@ -4,11 +4,16 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tevzpqfoaumgzpljimrc.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_C6EM7jUC3LIFWUKqYOyP5Q_NM4Ik2pv';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Initialize Gemini client on server with telemetry header
 const ai = new GoogleGenAI({
@@ -245,32 +250,106 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
     }
   }
 
-  // GET /api/videos - returns all community videos across devices
+  // GET /api/videos - returns all community videos across devices (Supabase cloud + local fallback)
   app.get('/api/videos', async (_req, res) => {
     try {
+      // 1. Primary: Query Supabase cloud
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('category', 'COMMUNITY_VIDEO')
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        const cloudVideos = data.map((row: any) => {
+          let extra: any = {};
+          if (row.rules && typeof row.rules === 'string') {
+            try { extra = JSON.parse(row.rules); } catch {}
+          }
+          return {
+            id: row.id,
+            videoUrl: extra.videoUrl || '',
+            youtubeUrl: extra.youtubeUrl || extra.videoUrl || '',
+            youtubeId: extra.youtubeId,
+            platform: extra.platform || row.format || 'youtube',
+            title: row.title || extra.title || 'Competition Video',
+            channelName: row.organizer || extra.channelName || 'Community Creator',
+            thumbnailUrl: row.banner_url || extra.thumbnailUrl || '',
+            category: extra.category || 'Football',
+            addedBy: extra.addedBy || 'Community Member',
+            createdAt: row.created_at ? row.created_at.split('T')[0] : (extra.createdAt || ''),
+          };
+        }).filter((v: any) => Boolean(v.videoUrl && v.title));
+
+        // Keep local mirror updated
+        await writeVideosToFile(cloudVideos);
+        return res.json({ success: true, videos: cloudVideos, source: 'cloud' });
+      }
+
+      // 2. Fallback to local file if cloud temporarily unreachable
       const videos = await readVideosFromFile();
-      return res.json({ success: true, videos });
+      return res.json({ success: true, videos, source: 'file' });
     } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
+      console.warn('GET /api/videos error, falling back to disk:', err);
+      const videos = await readVideosFromFile();
+      return res.json({ success: true, videos, source: 'file_fallback' });
     }
   });
 
-  // POST /api/videos - saves a new video across devices
+  // POST /api/videos - saves a new video to Supabase cloud and local file
   app.post('/api/videos', async (req, res) => {
     try {
       const newVideo = req.body;
       if (!newVideo || !newVideo.title || !newVideo.videoUrl) {
         return res.status(400).json({ success: false, error: 'Title and videoUrl are required' });
       }
-      const existing = await readVideosFromFile();
+
+      const today = new Date().toISOString().split('T')[0];
       const videoRecord = {
         ...newVideo,
         id: newVideo.id || `vid-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        createdAt: newVideo.createdAt || new Date().toISOString().split('T')[0],
+        createdAt: newVideo.createdAt || today,
       };
-      // Prepend so latest videos appear first
+
+      // 1. Save to Supabase Cloud
+      try {
+        const row = {
+          id: videoRecord.id,
+          title: videoRecord.title,
+          category: 'COMMUNITY_VIDEO',
+          format: videoRecord.platform || 'youtube',
+          status: 'active',
+          start_date: today,
+          end_date: today,
+          time: 'Replay',
+          city: 'Kathmandu',
+          province: 'Bagmati',
+          venue: 'Online / Multi-Platform',
+          registration_deadline: `${today}T23:59:59`,
+          entry_fee: 0,
+          prize_pool: 'N/A',
+          max_participants: 0,
+          current_participants: 0,
+          banner_url: videoRecord.thumbnailUrl || null,
+          description: videoRecord.title,
+          rules: JSON.stringify(videoRecord),
+          contact_email: '',
+          contact_phone: '',
+          organizer: videoRecord.channelName || 'Community Creator',
+          is_verified: true,
+          is_relief: false,
+        };
+        await supabase.from('tournaments').upsert(row, { onConflict: 'id' });
+      } catch (cloudErr) {
+        console.warn('Supabase cloud upsert warning:', cloudErr);
+      }
+
+      // 2. Also save to local mirror file
+      const existing = await readVideosFromFile();
       const updated = [videoRecord, ...existing.filter((v: any) => v.id !== videoRecord.id)];
       await writeVideosToFile(updated);
+
       return res.json({ success: true, video: videoRecord, videos: updated });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -281,9 +360,19 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
   app.delete('/api/videos/:id', async (req, res) => {
     try {
       const { id } = req.params;
+
+      // 1. Delete from Supabase Cloud (mark as deleted)
+      try {
+        await supabase.from('tournaments').update({ status: 'deleted' }).eq('id', id);
+      } catch (cloudErr) {
+        console.warn('Supabase delete warning:', cloudErr);
+      }
+
+      // 2. Remove from local mirror
       const existing = await readVideosFromFile();
       const updated = existing.filter((v: any) => v.id !== id);
       await writeVideosToFile(updated);
+
       return res.json({ success: true, message: 'Video removed successfully', videos: updated });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });

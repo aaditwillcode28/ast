@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Tournament, Registration } from '../types';
+import { Tournament, Registration, CommunityVideo } from '../types';
 import { DEFAULT_POSTER_FALLBACK } from '../data/mockTournaments';
 
 // Supabase configuration
@@ -51,8 +51,10 @@ export const fetchCloudTournamentsWithDeleted = async (): Promise<CloudSyncResul
     const activeTournaments: Tournament[] = [];
 
     for (const row of data) {
-      if (row.status === 'deleted') {
-        deletedIds.push(row.id);
+      if (row.status === 'deleted' || row.category === 'COMMUNITY_VIDEO') {
+        if (row.status === 'deleted') {
+          deletedIds.push(row.id);
+        }
         continue;
       }
 
@@ -346,6 +348,116 @@ export const updateCloudTournamentVerification = async (
     return true;
   } catch (err) {
     console.error('Exception updating tournament verification in cloud:', err);
+    return false;
+  }
+};
+
+// 8. Fetch community videos from global cloud database (True Cross-Device Sync)
+export const fetchCloudVideos = async (): Promise<CommunityVideo[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('tournaments')
+      .select('*')
+      .eq('category', 'COMMUNITY_VIDEO')
+      .neq('status', 'deleted')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) {
+      console.warn('Could not fetch cloud videos:', error?.message);
+      return [];
+    }
+
+    const videos: CommunityVideo[] = [];
+    for (const row of data) {
+      if (row.rules && typeof row.rules === 'string') {
+        try {
+          const parsed = JSON.parse(row.rules);
+          if (parsed && parsed.title && parsed.videoUrl) {
+            videos.push({
+              id: row.id,
+              videoUrl: parsed.videoUrl,
+              youtubeUrl: parsed.youtubeUrl || parsed.videoUrl,
+              youtubeId: parsed.youtubeId,
+              platform: parsed.platform || row.format || 'youtube',
+              title: row.title || parsed.title,
+              channelName: row.organizer || parsed.channelName || 'Community Creator',
+              thumbnailUrl: row.banner_url || parsed.thumbnailUrl || '',
+              category: parsed.category || 'Football',
+              addedBy: parsed.addedBy || 'Community Member',
+              createdAt: row.created_at ? row.created_at.split('T')[0] : (parsed.createdAt || ''),
+            });
+          }
+        } catch {}
+      }
+    }
+    return videos;
+  } catch (err) {
+    console.warn('Exception querying cloud videos:', err);
+    return [];
+  }
+};
+
+// 9. Save community video to global cloud database (Accessible across all devices)
+export const publishCloudVideo = async (
+  video: CommunityVideo
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const row = {
+      id: video.id,
+      title: video.title,
+      category: 'COMMUNITY_VIDEO',
+      format: video.platform || 'youtube',
+      status: 'active',
+      start_date: today,
+      end_date: today,
+      time: 'Replay',
+      city: 'Kathmandu',
+      province: 'Bagmati',
+      venue: 'Online / Multi-Platform',
+      registration_deadline: `${today}T23:59:59`,
+      entry_fee: 0,
+      prize_pool: 'N/A',
+      max_participants: 0,
+      current_participants: 0,
+      banner_url: video.thumbnailUrl || null,
+      description: video.title,
+      rules: JSON.stringify(video),
+      contact_email: '',
+      contact_phone: '',
+      organizer: video.channelName || 'Community Creator',
+      is_verified: true,
+      is_relief: false,
+    };
+
+    const { error } = await supabase.from('tournaments').upsert(row, { onConflict: 'id' });
+    if (error) {
+      console.error('Supabase video save error:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error('Exception publishing video to cloud:', err);
+    return { success: false, error: err?.message || 'Network error' };
+  }
+};
+
+// 10. Delete community video from global cloud database
+export const deleteCloudVideo = async (videoId: string): Promise<boolean> => {
+  try {
+    // Delete or mark deleted
+    const { error } = await supabase
+      .from('tournaments')
+      .delete()
+      .eq('id', videoId);
+
+    if (error) {
+      console.warn('Error deleting cloud video:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception deleting cloud video:', err);
     return false;
   }
 };
