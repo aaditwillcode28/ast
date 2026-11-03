@@ -94,6 +94,9 @@ export const fetchCloudTournamentsWithDeleted = async (forceFresh = false): Prom
         title: row.title || 'Untitled Opportunity',
         category: row.category || 'Other',
         posterUrl: row.banner_url || extra.posterUrl || DEFAULT_POSTER_FALLBACK,
+        posterUrls: Array.isArray(extra.posterUrls) && extra.posterUrls.length > 0
+          ? extra.posterUrls
+          : (row.banner_url || extra.posterUrl ? [row.banner_url || extra.posterUrl] : [DEFAULT_POSTER_FALLBACK]),
         startDate: row.start_date || '',
         endDate: row.end_date || row.start_date || '',
         calendarType: extra.calendarType || 'AD',

@@ -26,6 +26,7 @@ export interface Tournament {
   title: string;
   category: EventCategory;
   posterUrl: string;
+  posterUrls?: string[]; // Multiple photos / flyer gallery
   posterStyle?: string;
   startDate: string;
   endDate: string;

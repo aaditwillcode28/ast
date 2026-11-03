@@ -34,7 +34,10 @@ import {
   Edit3,
   PhoneCall,
   LayoutGrid,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Images,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Tournament } from '../types';
 import { formatEventDates } from '../utils/textFormat';
@@ -99,6 +102,33 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
       return [];
     }
   });
+
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+
+  // Reset photo index when opening or changing tournament
+  React.useEffect(() => {
+    setActivePhotoIndex(0);
+  }, [tournament?.id]);
+
+  const allPhotos: string[] = React.useMemo(() => {
+    if (!tournament) return [];
+    if (Array.isArray(tournament.posterUrls) && tournament.posterUrls.length > 0) {
+      return tournament.posterUrls;
+    }
+    return tournament.posterUrl ? [tournament.posterUrl] : [];
+  }, [tournament]);
+
+  const currentPhoto = allPhotos[activePhotoIndex] || tournament?.posterUrl || '';
+
+  const handlePrevPhoto = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setActivePhotoIndex((prev) => (prev > 0 ? prev - 1 : allPhotos.length - 1));
+  };
+
+  const handleNextPhoto = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setActivePhotoIndex((prev) => (prev < allPhotos.length - 1 ? prev + 1 : 0));
+  };
 
   if (!tournament) return null;
 
@@ -290,7 +320,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
               }`}
             >
               <ImageIcon className="h-4 w-4 shrink-0" />
-              <span>Only Poster</span>
+              <span>{allPhotos.length > 1 ? `Only Poster (${allPhotos.length})` : 'Only Poster'}</span>
             </button>
           </div>
         </div>
@@ -300,27 +330,79 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
           {/* TAB 1: POSTER & QUICK OVERVIEW */}
           {activeTab === 'poster' && (
             <div className="space-y-6">
-              {/* Main Poster Showcase */}
+              {/* Main Poster / Multi-Photo Showcase */}
               <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 shadow-md group">
-                <div className="relative aspect-[16/10] sm:aspect-[21/9] w-full bg-slate-950">
+                <div className="relative aspect-[16/10] sm:aspect-[21/9] w-full bg-slate-950 flex items-center justify-center">
                   <img
-                    src={tournament.posterUrl}
-                    alt={`${tournament.title} Full Poster`}
+                    src={currentPhoto}
+                    alt={`${tournament.title} Photo ${activePhotoIndex + 1}`}
                     referrerPolicy="no-referrer"
                     className="h-full w-full object-cover object-center"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none" />
+
+                  {/* Multi-Photo Carousel Arrows (if > 1 photo) */}
+                  {allPhotos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handlePrevPhoto}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 transition-all active:scale-95 cursor-pointer shadow-md"
+                        title="Previous photo"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleNextPhoto}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 hover:bg-black/85 text-white backdrop-blur-md border border-white/20 transition-all active:scale-95 cursor-pointer shadow-md"
+                        title="Next photo"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+
+                      {/* Photo indicator badge */}
+                      <div className="absolute top-3 right-3 z-20 rounded-full bg-slate-950/80 backdrop-blur-md px-3 py-1 text-xs font-bold text-white border border-white/20 flex items-center gap-1.5 shadow-sm">
+                        <Images className="h-3.5 w-3.5 text-orange-400" />
+                        <span>{activePhotoIndex + 1} of {allPhotos.length}</span>
+                      </div>
+                    </>
+                  )}
                   
                   {/* Overlay text */}
-                  <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6">
+                  <div className="absolute bottom-4 left-4 right-4 sm:bottom-6 sm:left-6 sm:right-6 pointer-events-none">
                     <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-500 px-3 py-1 text-xs font-bold text-white uppercase tracking-wider mb-2">
-                      Tournament Poster
+                      {allPhotos.length > 1 ? `Photo ${activePhotoIndex + 1} of ${allPhotos.length}` : 'Tournament Poster'}
                     </div>
                     <h1 className="font-display text-2xl sm:text-4xl font-extrabold text-white">
                       {tournament.title}
                     </h1>
                   </div>
                 </div>
+
+                {/* Thumbnail strip if multiple photos */}
+                {allPhotos.length > 1 && (
+                  <div className="p-2.5 bg-slate-950 border-t border-white/10 flex items-center gap-2 overflow-x-auto">
+                    {allPhotos.map((photo, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActivePhotoIndex(idx)}
+                        className={`relative h-14 w-20 shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                          idx === activePhotoIndex
+                            ? 'border-orange-500 scale-105 shadow-md shadow-orange-500/20'
+                            : 'border-white/20 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={photo} alt={`Thumbnail ${idx + 1}`} className="h-full w-full object-cover" />
+                        <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 py-0.2 text-[9px] font-bold text-white">
+                          #{idx + 1}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* REGISTRATION DEADLINE LIVE COUNTDOWN BANNER */}
@@ -787,32 +869,87 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: SHOW ONLY THE POSTER ITSELF */}
+          {/* TAB 3: SHOW ONLY THE POSTER ITSELF / FULL PHOTO GALLERY */}
           {activeTab === 'poster-only' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Full Tournament Poster View
-                </span>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Images className="h-4 w-4 text-orange-600" />
+                    <span>{allPhotos.length > 1 ? `Tournament Gallery (${allPhotos.length} Photos)` : 'Full Tournament Poster View'}</span>
+                  </span>
+                  {allPhotos.length > 1 && (
+                    <span className="rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold px-2 py-0.5">
+                      Photo {activePhotoIndex + 1} of {allPhotos.length}
+                    </span>
+                  )}
+                </div>
                 <a
-                  href={tournament.posterUrl}
+                  href={currentPhoto}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-xs font-bold text-orange-600 hover:text-orange-700"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  <span>Open Full Size Image</span>
+                  <span>Open Current Photo Full Size</span>
                 </a>
               </div>
 
-              <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 flex items-center justify-center p-2 sm:p-4 shadow-lg min-h-[400px]">
+              {/* Main Full-Size Image Container with carousel */}
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 flex items-center justify-center p-2 sm:p-4 shadow-lg min-h-[400px]">
                 <img
-                  src={tournament.posterUrl}
-                  alt={`${tournament.title} Poster Full`}
+                  src={currentPhoto}
+                  alt={`${tournament.title} Photo ${activePhotoIndex + 1}`}
                   referrerPolicy="no-referrer"
                   className="max-h-[70vh] w-auto max-w-full object-contain rounded-xl"
                 />
+
+                {/* Left & Right navigation buttons */}
+                {allPhotos.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handlePrevPhoto}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md border border-white/20 transition-all active:scale-95 cursor-pointer shadow-md"
+                      title="Previous photo"
+                    >
+                      <ChevronLeft className="h-6 w-6" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleNextPhoto}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 hover:bg-black/90 text-white backdrop-blur-md border border-white/20 transition-all active:scale-95 cursor-pointer shadow-md"
+                      title="Next photo"
+                    >
+                      <ChevronRight className="h-6 w-6" />
+                    </button>
+                  </>
+                )}
               </div>
+
+              {/* Thumbnail selector strip if multiple photos */}
+              {allPhotos.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto p-2 bg-slate-100 rounded-xl border border-slate-200">
+                  {allPhotos.map((photo, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActivePhotoIndex(idx)}
+                      className={`relative h-16 w-24 shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                        idx === activePhotoIndex
+                          ? 'border-orange-500 scale-105 shadow-md shadow-orange-500/30'
+                          : 'border-slate-300 opacity-65 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={photo} alt={`Thumbnail ${idx + 1}`} className="h-full w-full object-cover" />
+                      <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.2 text-[9px] font-bold text-white">
+                        #{idx + 1}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
                 <div>

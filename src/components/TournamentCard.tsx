@@ -21,7 +21,8 @@ import {
   Check,
   Building,
   CheckCircle2,
-  Phone
+  Phone,
+  Images
 } from 'lucide-react';
 import { Tournament } from '../types';
 import { getEventPageUrl } from '../utils/seo';
@@ -192,6 +193,14 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
             {tournament.province && (
               <span className="hidden sm:inline-flex items-center rounded-lg bg-slate-900/80 px-2 py-0.5 text-[10px] font-bold text-slate-200 border border-white/10 backdrop-blur-md">
                 {tournament.province}
+              </span>
+            )}
+
+            {/* Multi-Photo Count Badge */}
+            {tournament.posterUrls && tournament.posterUrls.length > 1 && (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-900/90 px-2 py-0.5 text-[10px] font-bold text-orange-300 border border-orange-500/30 backdrop-blur-md">
+                <Images className="h-3 w-3 text-orange-400" />
+                <span>{tournament.posterUrls.length} Photos</span>
               </span>
             )}
 

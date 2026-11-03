@@ -3,6 +3,10 @@ import {
   X,
   Upload,
   Image as ImageIcon,
+  Images,
+  Trash2,
+  Plus,
+  Star,
   Calendar,
   MapPin,
   CheckCircle,
@@ -52,6 +56,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const [title, setTitle] = useState('');
   const [posterUrl, setPosterUrl] = useState(DEFAULT_POSTER_FALLBACK);
   const [customPosterFile, setCustomPosterFile] = useState<string | null>(null);
+  const [posterPhotos, setPosterPhotos] = useState<string[]>([]);
   const [posterUrlInput, setPosterUrlInput] = useState('');
 
   // Official Link & Charity/Flood Relief
@@ -146,6 +151,10 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       setTitle(tournamentToEdit.title || '');
       setPosterUrl(tournamentToEdit.posterUrl || DEFAULT_POSTER_FALLBACK);
       setCustomPosterFile(null);
+      const existingPhotos = tournamentToEdit.posterUrls && tournamentToEdit.posterUrls.length > 0
+        ? tournamentToEdit.posterUrls
+        : (tournamentToEdit.posterUrl && tournamentToEdit.posterUrl !== DEFAULT_POSTER_FALLBACK ? [tournamentToEdit.posterUrl] : []);
+      setPosterPhotos(existingPhotos);
       setOfficialLink(tournamentToEdit.officialLink || '');
       setIsCharity(Boolean(tournamentToEdit.isCharity));
       setHasNoSlots(Boolean(tournamentToEdit.hasNoSlots));
@@ -262,31 +271,94 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     });
   };
 
-  // Handle file upload for poster/pamphlet
+  // Handle multiple file upload for posters/pamphlets/photos
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
-      setErrorMsg('Please upload a valid image file (.png, .jpg, .webp).');
-      return;
-    }
+    setErrorMsg('');
+    const newPhotos: string[] = [];
 
-    if (file.size > 15 * 1024 * 1024) {
-      setErrorMsg('Poster image should be under 15MB.');
-      return;
-    }
-
-    try {
-      const displayDataUrl = await compressImageFile(file, 1200, 0.85);
-      if (displayDataUrl) {
-        setCustomPosterFile(displayDataUrl);
-        setPosterUrl(displayDataUrl);
-        setErrorMsg('');
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) {
+        setErrorMsg('Please upload valid image files (.png, .jpg, .webp).');
+        continue;
       }
-    } catch {
-      setErrorMsg('Could not process image file. Please try another image.');
+      if (file.size > 20 * 1024 * 1024) {
+        setErrorMsg('Each image should be under 20MB.');
+        continue;
+      }
+
+      try {
+        const compressed = await compressImageFile(file, 850, 0.70);
+        if (compressed) {
+          newPhotos.push(compressed);
+        }
+      } catch (err) {
+        console.warn('Could not compress photo:', err);
+      }
     }
+
+    if (newPhotos.length > 0) {
+      setPosterPhotos((prev) => {
+        const updated = [...prev, ...newPhotos];
+        if (updated.length > 0) {
+          setPosterUrl(updated[0]);
+          setCustomPosterFile(updated[0]);
+        }
+        return updated;
+      });
+      setErrorMsg('');
+    }
+
+    // Reset file input value so user can upload the same or more files
+    e.target.value = '';
+  };
+
+  const handleAddPosterUrl = () => {
+    const trimmed = posterUrlInput.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      setErrorMsg('Please enter a complete URL starting with https://');
+      return;
+    }
+    setPosterPhotos((prev) => {
+      const updated = [...prev, trimmed];
+      if (updated.length === 1) {
+        setPosterUrl(trimmed);
+        setCustomPosterFile(trimmed);
+      }
+      return updated;
+    });
+    setPosterUrlInput('');
+    setErrorMsg('');
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setPosterPhotos((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      if (updated.length > 0) {
+        setPosterUrl(updated[0]);
+        setCustomPosterFile(updated[0]);
+      } else {
+        setPosterUrl(DEFAULT_POSTER_FALLBACK);
+        setCustomPosterFile(null);
+      }
+      return updated;
+    });
+  };
+
+  const handleSetCoverPhoto = (index: number) => {
+    setPosterPhotos((prev) => {
+      if (index === 0) return prev;
+      const target = prev[index];
+      const remainder = prev.filter((_, i) => i !== index);
+      const updated = [target, ...remainder];
+      setPosterUrl(target);
+      setCustomPosterFile(target);
+      return updated;
+    });
   };
 
   // Handle Host Payment QR code upload
@@ -390,7 +462,8 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
         id: tournamentToEdit ? tournamentToEdit.id : `kt-${Date.now()}`,
         title: title.trim(),
         category: isCharity ? 'Charity & Relief' : effectiveCategory,
-        posterUrl: posterUrl,
+        posterUrl: posterPhotos.length > 0 ? posterPhotos[0] : (posterUrl || DEFAULT_POSTER_FALLBACK),
+        posterUrls: posterPhotos.length > 0 ? posterPhotos : [posterUrl || DEFAULT_POSTER_FALLBACK],
         startDate: startDate,
         endDate: endDate || startDate,
         calendarType,
@@ -689,119 +762,153 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* LEFT COLUMN (7 cols) */}
             <div className="lg:col-span-7 space-y-5">
-              {/* POSTER / FLYER UPLOAD SECTION */}
+              {/* POSTER / FLYER UPLOAD SECTION (MULTIPLE PHOTOS SUPPORTED) */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex items-center justify-between flex-wrap gap-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <Upload className="h-4 w-4 text-orange-600" /> Tournament Poster / Flyer
+                    <Images className="h-4 w-4 text-orange-600" /> Tournament Posters & Photos
                   </label>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    Displayed prominently on listing & detail modal
+                  <span className="text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-0.5 rounded-full">
+                    {posterPhotos.length} {posterPhotos.length === 1 ? 'photo attached' : 'photos attached'}
                   </span>
                 </div>
+                <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                  Attach more than one photo (e.g. main event flyer, fixtures / schedule bracket, rules page, venue court). The first photo serves as the public cover poster.
+                </p>
 
-                {customPosterFile || (posterUrl && posterUrl !== DEFAULT_POSTER_FALLBACK) ? (
-                  /* Uploaded / Selected Poster Preview */
-                  <div className="relative mt-2 rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-xs">
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                      <div className="relative h-32 w-28 shrink-0 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-sm">
-                        <img
-                          src={customPosterFile || posterUrl}
-                          alt="Tournament Flyer"
-                          className="h-full w-full object-cover"
-                        />
-                        <div className="absolute top-1 right-1 rounded-md bg-emerald-500 p-0.5 text-white">
-                          <CheckCircle className="h-3 w-3" />
-                        </div>
-                      </div>
-
-                      <div className="flex-1 text-center sm:text-left space-y-2">
-                        <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                          <span className="rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-0.5">
-                            Poster Attached
-                          </span>
-                          <span className="text-xs text-slate-500">Ready for public display</span>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed">
-                          Your flyer is set. Viewers can examine this poster in full detail directly on the tournament page or in poster-only mode.
-                        </p>
-
-                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
-                          <label className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 px-3.5 py-1.5 text-xs font-bold text-slate-800 transition-colors cursor-pointer">
-                            <Upload className="h-3.5 w-3.5" />
-                            <span>Change Flyer Image</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleFileUpload}
-                              className="hidden"
-                            />
-                          </label>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustomPosterFile(null);
-                              setPosterUrl(DEFAULT_POSTER_FALLBACK);
-                              setPosterUrlInput('');
-                            }}
-                            className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors cursor-pointer"
+                {posterPhotos.length > 0 ? (
+                  /* Gallery grid of uploaded photos */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {posterPhotos.map((photo, index) => {
+                        const isCover = index === 0;
+                        return (
+                          <div
+                            key={index}
+                            className={`group relative rounded-xl overflow-hidden border-2 bg-white shadow-xs transition-all ${
+                              isCover ? 'border-orange-500 ring-2 ring-orange-500/20' : 'border-slate-200 hover:border-slate-300'
+                            }`}
                           >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
+                            <div className="aspect-[4/3] w-full bg-slate-900 overflow-hidden relative">
+                              <img
+                                src={photo}
+                                alt={`Poster ${index + 1}`}
+                                className="h-full w-full object-cover object-center"
+                              />
+
+                              {/* Cover badge */}
+                              {isCover ? (
+                                <div className="absolute top-1.5 left-1.5 rounded-md bg-orange-600 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow-xs flex items-center gap-1">
+                                  <Star className="h-2.5 w-2.5 fill-white" />
+                                  <span>Cover</span>
+                                </div>
+                              ) : (
+                                <span className="absolute top-1.5 left-1.5 rounded-md bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-slate-200">
+                                  #{index + 1}
+                                </span>
+                              )}
+
+                              {/* Remove button */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePhoto(index)}
+                                className="absolute top-1.5 right-1.5 rounded-md bg-rose-600/90 hover:bg-rose-600 text-white p-1 transition-all shadow-xs cursor-pointer"
+                                title="Remove photo"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+
+                            <div className="p-1.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                              {isCover ? (
+                                <span className="font-bold text-orange-600 text-[10px]">Main Cover Poster</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetCoverPhoto(index)}
+                                  className="text-[10px] font-bold text-slate-600 hover:text-orange-600 transition-colors cursor-pointer"
+                                  title="Make this photo the primary cover"
+                                >
+                                  Set as Cover
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Actions row: add more photos or clear */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <label className="flex items-center gap-1.5 rounded-xl border border-orange-300 bg-orange-50 hover:bg-orange-100 px-3.5 py-2 text-xs font-bold text-orange-800 transition-colors cursor-pointer">
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Add More Photos</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPosterPhotos([]);
+                          setPosterUrl(DEFAULT_POSTER_FALLBACK);
+                          setCustomPosterFile(null);
+                        }}
+                        className="rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-700 transition-colors cursor-pointer"
+                      >
+                        Remove All
+                      </button>
                     </div>
                   </div>
                 ) : (
-                  /* Initial upload drop box */
+                  /* Initial upload drop box with multi-select */
                   <div className="relative mt-2 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 text-center hover:border-orange-500 hover:bg-orange-50/20 transition-all cursor-pointer">
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       onChange={handleFileUpload}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     />
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-md shadow-orange-500/30 mb-2.5">
-                      <Upload className="h-6 w-6" />
+                      <Images className="h-6 w-6" />
                     </div>
                     <p className="text-sm font-bold text-slate-900">
-                      Upload Tournament Flyer / Poster
+                      Upload Tournament Flyers & Photos
                     </p>
                     <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                      PNG, JPG, or WebP up to 15MB. Your poster will be shown in full high resolution to all participants.
+                      Attach one or more photos (main flyer, fixtures, rules, venue). PNG, JPG, or WebP. Multi-select supported.
                     </p>
-                    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-700">
-                      Click to Browse or Drag & Drop Flyer
+                    <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3.5 py-1.5 text-[11px] font-semibold text-slate-700">
+                      Click to Browse or Drag & Drop Multiple Photos
                     </span>
                   </div>
                 )}
 
-                {/* Or enter Direct Flyer Image URL */}
-                <div className="mt-3">
+                {/* Paste direct Image URL */}
+                <div className="mt-3 pt-3 border-t border-slate-200/80">
                   <label className="block text-xs font-medium text-slate-600 mb-1">
-                    Or paste direct Image / Poster URL:
+                    Or paste direct Image Link / URL:
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="url"
                       value={posterUrlInput}
                       onChange={(e) => setPosterUrlInput(e.target.value)}
-                      placeholder="https://... or hosted image link"
+                      placeholder="https://... image link"
                       className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                     <button
                       type="button"
-                      onClick={() => {
-                        if (posterUrlInput.trim()) {
-                          const url = posterUrlInput.trim();
-                          setPosterUrl(url);
-                          setCustomPosterFile(null);
-                        }
-                      }}
+                      onClick={handleAddPosterUrl}
                       className="rounded-xl bg-slate-900 hover:bg-slate-800 px-3.5 py-2 text-xs font-bold text-white transition-colors cursor-pointer"
                     >
-                      Apply URL
+                      Add Photo URL
                     </button>
                   </div>
                 </div>
