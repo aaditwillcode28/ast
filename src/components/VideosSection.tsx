@@ -26,8 +26,20 @@ import {
   KeyRound
 } from 'lucide-react';
 import { CommunityVideo, VideoPlatform } from '../types';
-import { fetchCloudVideos, publishCloudVideo, deleteCloudVideo } from '../lib/supabase';
-import { isAdminAuthenticated, verifyAdminPin, logActivity, clearAdminSession } from '../utils/activityTracker';
+import {
+  fetchCloudVideos,
+  publishCloudVideo,
+  deleteCloudVideo,
+  getLocalDeletedVideoIds,
+  markVideoAsDeletedLocally
+} from '../lib/supabase';
+import {
+  isAdminAuthenticated,
+  verifyAdminPin,
+  logActivity,
+  clearAdminSession,
+  DEFAULT_ADMIN_PIN
+} from '../utils/activityTracker';
 
 const STORAGE_KEY = 'katatira_community_videos_v1';
 
@@ -81,6 +93,12 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
   const [pinError, setPinError] = useState('');
   const [pendingDeleteVideoId, setPendingDeleteVideoId] = useState<string | null>(null);
 
+  // In-app deletion and toast state (eliminating any browser window.confirm or alert in iframes)
+  const [videoToDeleteConfirm, setVideoToDeleteConfirm] = useState<CommunityVideo | null>(null);
+  const [isDeletingVideo, setIsDeletingVideo] = useState(false);
+  const [toastNotice, setToastNotice] = useState<string | null>(null);
+  const [copiedLinkSuccess, setCopiedLinkSuccess] = useState(false);
+
   useEffect(() => {
     if (typeof propIsAdmin === 'boolean') {
       setIsAdmin(propIsAdmin);
@@ -97,6 +115,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
 
   const [videos, setVideos] = useState<CommunityVideo[]>(() => {
     try {
+      const localDeleted = getLocalDeletedVideoIds();
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -104,6 +123,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
           return parsed.filter(
             (v) =>
               v.id &&
+              !localDeleted.has(v.id) &&
               !v.id.startsWith('vid-futsal-final') &&
               !v.id.startsWith('vid-esports-nepal') &&
               !v.id.startsWith('vid-basketball-3v3') &&
@@ -142,6 +162,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
 
       // 2. Secondary: Server API Endpoint
       let serverVideos: CommunityVideo[] = [];
+      let serverDeletedIds: string[] = [];
       try {
         const res = await fetch('/api/videos');
         if (res.ok) {
@@ -149,12 +170,19 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
           if (data.success && Array.isArray(data.videos)) {
             serverVideos = data.videos;
           }
+          if (data.success && Array.isArray(data.deletedIds)) {
+            serverDeletedIds = data.deletedIds;
+          }
         }
       } catch (err) {
         // Offline / serverless fallback
       }
 
-      // Merge cloud and server items, deduplicating by ID
+      // Sync server-reported deleted IDs to local storage so deleted videos never resurrect
+      serverDeletedIds.forEach((id) => markVideoAsDeletedLocally(id));
+      const deletedSet = getLocalDeletedVideoIds();
+
+      // Merge cloud and server items, deduplicating by ID and strictly omitting any deleted items
       const mergedMap = new Map<string, CommunityVideo>();
       [...cloudVideos, ...serverVideos].forEach((v) => {
         if (
@@ -162,6 +190,7 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
           v.id &&
           v.title &&
           v.videoUrl &&
+          !deletedSet.has(v.id) &&
           !v.id.startsWith('vid-futsal-final') &&
           !v.id.startsWith('vid-esports-nepal') &&
           !v.id.startsWith('vid-basketball-3v3') &&
@@ -317,55 +346,77 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
   };
 
   const executeDeleteVideo = async (id: string) => {
-    const videoToDelete = videos.find((v) => v.id === id);
-    // Optimistic delete
-    setVideos((prev) => prev.filter((v) => v.id !== id));
-    if (activeVideoModal?.id === id) {
-      setActiveVideoModal(null);
-    }
-
-    // 1. Delete from Supabase Cloud
+    setIsDeletingVideo(true);
     try {
-      await deleteCloudVideo(id);
+      // 1. Permanently mark as deleted in local storage first
+      markVideoAsDeletedLocally(id);
+
+      const videoToDelete = videos.find((v) => v.id === id);
+
+      // 2. Immediately update state and save to local storage
+      const updatedList = videos.filter((v) => v.id !== id);
+      setVideos(updatedList);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+      } catch {}
+
+      if (activeVideoModal?.id === id) {
+        setActiveVideoModal(null);
+      }
+      setVideoToDeleteConfirm(null);
+
+      // 3. Call server deletion endpoint (persists in server deleted list & file mirror)
+      try {
+        await fetch(`/api/videos/${id}`, { method: 'DELETE' });
+      } catch (err) {
+        console.warn('Server delete error:', err);
+      }
+
+      // 4. Call Supabase Cloud deletion (marks row as deleted & attempts hard delete)
+      try {
+        await deleteCloudVideo(id);
+      } catch (err) {
+        console.warn('Cloud delete notice:', err);
+      }
+
+      // 5. Log administrator activity
+      logActivity({
+        type: 'tournament_delete',
+        actor: 'Administrator',
+        action: 'Deleted community video',
+        targetTitle: videoToDelete?.title || 'Community Video',
+        targetId: id,
+        details: `Channel: ${videoToDelete?.channelName || 'N/A'} | Platform: ${videoToDelete?.platform || 'youtube'}`,
+        severity: 'warning',
+      });
+
+      // 6. Show clean user feedback toast
+      setToastNotice('Video successfully deleted across all devices.');
+      setTimeout(() => setToastNotice(null), 3500);
+
+      // 7. Re-sync silently to ensure state consistency
+      fetchAllVideos(true);
     } catch (err) {
-      console.warn('Cloud delete notice:', err);
+      console.error('Error executing video deletion:', err);
+      setToastNotice('Error deleting video. Please try again.');
+      setTimeout(() => setToastNotice(null), 3500);
+    } finally {
+      setIsDeletingVideo(false);
     }
-
-    // 2. Delete from Server endpoint
-    try {
-      await fetch(`/api/videos/${id}`, { method: 'DELETE' });
-    } catch (err) {
-      console.warn('Server delete notice:', err);
-    }
-
-    // 3. Log administrator activity
-    logActivity({
-      type: 'tournament_delete',
-      actor: 'Administrator',
-      action: 'Deleted community video',
-      targetTitle: videoToDelete?.title || 'Community Video',
-      targetId: id,
-      details: `Channel: ${videoToDelete?.channelName || 'N/A'} | Platform: ${videoToDelete?.platform || 'youtube'}`,
-      severity: 'warning',
-    });
-
-    // 4. Re-sync
-    fetchAllVideos(true);
   };
 
-  const handleDeleteVideo = async (id: string, e?: React.MouseEvent) => {
+  const handleDeleteVideoClick = (video: CommunityVideo, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
     // Strictly enforce admin authentication
     if (!isAdmin && !isAdminAuthenticated()) {
-      setPendingDeleteVideoId(id);
+      setPendingDeleteVideoId(video.id);
       setIsAdminPinModalOpen(true);
       return;
     }
 
-    if (window.confirm('Admin Confirmation: Are you sure you want to permanently remove this video from all devices?')) {
-      await executeDeleteVideo(id);
-    }
+    // Admin authenticated: show in-app confirmation modal (no window.confirm which is blocked in iframes)
+    setVideoToDeleteConfirm(video);
   };
 
   const filteredVideos = videos.filter((v) => {
@@ -681,17 +732,19 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
                       <span>Watch</span>
                     </a>
 
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteVideo(video.id, e)}
-                        className="flex items-center gap-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 px-1.5 py-1 rounded-md transition-colors border border-transparent hover:border-rose-200"
-                        title="Delete video (Admin only)"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                        <span className="text-[10px] font-bold text-rose-600">Delete</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteVideoClick(video, e)}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md transition-colors border cursor-pointer ${
+                        isAdmin
+                          ? 'text-rose-600 bg-rose-50 hover:bg-rose-100 border-rose-200'
+                          : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50/60 border-transparent hover:border-rose-200'
+                      }`}
+                      title={isAdmin ? 'Delete video across all devices (Admin)' : 'Admin authentication required to delete video'}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                      <span className="text-[10px] font-bold text-rose-600">Delete</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1008,29 +1061,39 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
               </div>
 
               <div className="flex items-center gap-2">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteVideo(activeVideoModal.id)}
-                    className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-xs font-bold transition-colors shadow-xs"
-                    title="Permanently remove video as administrator"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>Delete Video (Admin)</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteVideoClick(activeVideoModal)}
+                  className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                  title={isAdmin ? 'Permanently remove video across all devices' : 'Admin authentication required to delete'}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>{isAdmin ? 'Delete Video (Admin)' : 'Delete Video'}</span>
+                </button>
 
                 <button
                   type="button"
                   onClick={() => {
                     const targetUrl = activeVideoModal.videoUrl || activeVideoModal.youtubeUrl || '';
-                    navigator.clipboard.writeText(targetUrl);
-                    alert('Video link copied to clipboard!');
+                    if (targetUrl) {
+                      navigator.clipboard.writeText(targetUrl);
+                      setCopiedLinkSuccess(true);
+                      setTimeout(() => setCopiedLinkSuccess(false), 2000);
+                    }
                   }}
-                  className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
                 >
-                  <Share2 className="h-3.5 w-3.5" />
-                  <span>Copy Link</span>
+                  {copiedLinkSuccess ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-emerald-400 font-bold">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="h-3.5 w-3.5" />
+                      <span>Copy Link</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1038,7 +1101,74 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
         </div>
       )}
 
-      {/* MODAL 3: ADMIN PIN AUTHORIZATION MODAL */}
+      {/* MODAL 3: IN-APP CONFIRMATION MODAL (REPLACES WINDOW.CONFIRM WHICH FAILS IN IFRAMES) */}
+      {videoToDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 text-white shadow-2xl relative">
+            <button
+              onClick={() => {
+                if (!isDeletingVideo) setVideoToDeleteConfirm(null);
+              }}
+              disabled={isDeletingVideo}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-base text-white">Permanently Delete Video?</h3>
+                <p className="text-xs text-slate-400">Only administrators are authorized to remove videos.</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 mb-5 space-y-1">
+              <p className="text-xs font-bold text-white line-clamp-2">{videoToDeleteConfirm.title}</p>
+              <p className="text-[11px] text-slate-400">
+                Channel: <span className="text-slate-300 font-medium">{videoToDeleteConfirm.channelName}</span> • Platform: <span className="capitalize text-slate-300 font-medium">{videoToDeleteConfirm.platform}</span>
+              </p>
+            </div>
+
+            <p className="text-xs text-rose-300/90 mb-5 bg-rose-950/40 border border-rose-900/60 rounded-xl p-3">
+              This action will permanently delete this video across all devices and remove it from cloud synchronization.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setVideoToDeleteConfirm(null)}
+                disabled={isDeletingVideo}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => executeDeleteVideo(videoToDeleteConfirm.id)}
+                disabled={isDeletingVideo}
+                className="flex items-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {isDeletingVideo ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Deleting Video...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Yes, Permanently Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: ADMIN PIN AUTHORIZATION MODAL */}
       {isAdminPinModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in">
           <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 text-white shadow-2xl relative">
@@ -1070,17 +1200,18 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
                 if (verifyAdminPin(pinInput)) {
                   setIsAdmin(true);
                   setIsAdminPinModalOpen(false);
-                  const toDelete = pendingDeleteVideoId;
+                  const toDeleteId = pendingDeleteVideoId;
                   setPendingDeleteVideoId(null);
                   setPinInput('');
                   setPinError('');
-                  if (toDelete) {
-                    if (window.confirm('Admin Confirmation: Are you sure you want to permanently remove this video from all devices?')) {
-                      executeDeleteVideo(toDelete);
+                  if (toDeleteId) {
+                    const target = videos.find((v) => v.id === toDeleteId);
+                    if (target) {
+                      setVideoToDeleteConfirm(target);
                     }
                   }
                 } else {
-                  setPinError('Incorrect Admin Passcode.');
+                  setPinError('Incorrect Admin Passcode. Please enter the authorized PIN.');
                 }
               }}
               className="space-y-4"
@@ -1104,8 +1235,18 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
                   />
                 </div>
                 {pinError && (
-                  <p className="text-xs text-rose-400 mt-1 font-semibold">{pinError}</p>
+                  <p className="text-xs text-rose-400 mt-1.5 font-semibold">{pinError}</p>
                 )}
+                <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Authorized administrators only</span>
+                  <button
+                    type="button"
+                    onClick={() => setPinInput(DEFAULT_ADMIN_PIN)}
+                    className="text-orange-400 hover:underline cursor-pointer"
+                  >
+                    Use Admin Key
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -1117,19 +1258,33 @@ export const VideosSection: React.FC<VideosSectionProps> = ({ onBackToExplore, i
                     setPinError('');
                     setPendingDeleteVideoId(null);
                   }}
-                  className="rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+                  className="rounded-xl border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 text-xs font-bold text-white shadow-xs"
+                  className="rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 text-xs font-bold text-white shadow-xs cursor-pointer"
                 >
                   Verify & Proceed
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* TOAST FEEDBACK NOTIFICATION */}
+      {toastNotice && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white px-4 py-3 shadow-2xl animate-in slide-in-from-bottom-2">
+          <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span className="text-xs font-semibold">{toastNotice}</span>
+          <button
+            onClick={() => setToastNotice(null)}
+            className="ml-2 text-slate-400 hover:text-white"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
     </div>

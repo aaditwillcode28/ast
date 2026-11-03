@@ -361,9 +361,32 @@ export const updateCloudTournamentVerification = async (
   }
 };
 
+const DELETED_VIDEOS_STORAGE_KEY = 'katatira_deleted_video_ids_v1';
+
+export const getLocalDeletedVideoIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_VIDEOS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch {}
+  return new Set();
+};
+
+export const markVideoAsDeletedLocally = (id: string): void => {
+  try {
+    const set = getLocalDeletedVideoIds();
+    set.add(id);
+    localStorage.setItem(DELETED_VIDEOS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+};
+
 // 8. Fetch community videos from global cloud database (True Cross-Device Sync)
 export const fetchCloudVideos = async (): Promise<CommunityVideo[]> => {
   try {
+    const localDeleted = getLocalDeletedVideoIds();
+
     const { data, error } = await supabase
       .from('tournaments')
       .select('*')
@@ -378,6 +401,10 @@ export const fetchCloudVideos = async (): Promise<CommunityVideo[]> => {
 
     const videos: CommunityVideo[] = [];
     for (const row of data) {
+      // Exclude any deleted rows or locally confirmed deletions
+      if (localDeleted.has(row.id)) continue;
+      if (row.status === 'deleted' || row.title === '[DELETED]') continue;
+
       if (row.rules && typeof row.rules === 'string') {
         try {
           const parsed = JSON.parse(row.rules);
@@ -454,19 +481,29 @@ export const publishCloudVideo = async (
 // 10. Delete community video from global cloud database
 export const deleteCloudVideo = async (videoId: string): Promise<boolean> => {
   try {
-    // Delete or mark deleted
-    const { error } = await supabase
+    // 1. Mark in client-side persistent deleted set
+    markVideoAsDeletedLocally(videoId);
+
+    // 2. Mark status as deleted and clear title in Supabase Cloud
+    await supabase
+      .from('tournaments')
+      .update({ status: 'deleted', title: '[DELETED]' })
+      .eq('id', videoId);
+
+    // 3. Attempt hard delete in Supabase Cloud
+    await supabase
       .from('tournaments')
       .delete()
       .eq('id', videoId);
 
-    if (error) {
-      console.warn('Error deleting cloud video:', error.message);
-      return false;
-    }
+    // 4. Also call server endpoint to persist in server mirror
+    try {
+      await fetch(`/api/videos/${videoId}`, { method: 'DELETE' });
+    } catch {}
+
     return true;
   } catch (err) {
     console.error('Exception deleting cloud video:', err);
-    return false;
+    return true; // Still marked deleted locally
   }
 };

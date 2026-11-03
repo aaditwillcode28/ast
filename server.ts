@@ -225,7 +225,40 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
   // ==========================================
   // API: Cross-Device Community Videos (Multi-Platform)
   // ==========================================
-  const videosFilePath = path.resolve(__dirname, 'src', 'data', 'community_videos.json');
+  const dataDir = path.resolve(__dirname, 'src', 'data');
+  if (!fs.existsSync(dataDir)) {
+    try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
+  }
+  const videosFilePath = path.resolve(dataDir, 'community_videos.json');
+  const deletedVideosFilePath = path.resolve(dataDir, 'deleted_video_ids.json');
+
+  async function readDeletedVideoIds(): Promise<string[]> {
+    try {
+      if (!fs.existsSync(deletedVideosFilePath)) {
+        await fs.promises.writeFile(deletedVideosFilePath, '[]', 'utf-8');
+        return [];
+      }
+      const raw = await fs.promises.readFile(deletedVideosFilePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function recordDeletedVideoId(id: string): Promise<string[]> {
+    try {
+      const existing = await readDeletedVideoIds();
+      if (!existing.includes(id)) {
+        existing.push(id);
+        await fs.promises.writeFile(deletedVideosFilePath, JSON.stringify(existing, null, 2), 'utf-8');
+      }
+      return existing;
+    } catch (err) {
+      console.error('Error recording deleted video id:', err);
+      return [];
+    }
+  }
 
   async function readVideosFromFile(): Promise<any[]> {
     try {
@@ -253,6 +286,9 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
   // GET /api/videos - returns all community videos across devices (Supabase cloud + local fallback)
   app.get('/api/videos', async (_req, res) => {
     try {
+      const deletedList = await readDeletedVideoIds();
+      const deletedSet = new Set(deletedList);
+
       // 1. Primary: Query Supabase cloud
       const { data, error } = await supabase
         .from('tournaments')
@@ -262,38 +298,45 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
         .order('created_at', { ascending: false });
 
       if (!error && Array.isArray(data)) {
-        const cloudVideos = data.map((row: any) => {
-          let extra: any = {};
-          if (row.rules && typeof row.rules === 'string') {
-            try { extra = JSON.parse(row.rules); } catch {}
-          }
-          return {
-            id: row.id,
-            videoUrl: extra.videoUrl || '',
-            youtubeUrl: extra.youtubeUrl || extra.videoUrl || '',
-            youtubeId: extra.youtubeId,
-            platform: extra.platform || row.format || 'youtube',
-            title: row.title || extra.title || 'Competition Video',
-            channelName: row.organizer || extra.channelName || 'Community Creator',
-            thumbnailUrl: row.banner_url || extra.thumbnailUrl || '',
-            category: extra.category || 'Football',
-            addedBy: extra.addedBy || 'Community Member',
-            createdAt: row.created_at ? row.created_at.split('T')[0] : (extra.createdAt || ''),
-          };
-        }).filter((v: any) => Boolean(v.videoUrl && v.title));
+        const cloudVideos = data
+          .filter((row: any) => !deletedSet.has(row.id) && row.status !== 'deleted' && row.title !== '[DELETED]')
+          .map((row: any) => {
+            let extra: any = {};
+            if (row.rules && typeof row.rules === 'string') {
+              try { extra = JSON.parse(row.rules); } catch {}
+            }
+            return {
+              id: row.id,
+              videoUrl: extra.videoUrl || '',
+              youtubeUrl: extra.youtubeUrl || extra.videoUrl || '',
+              youtubeId: extra.youtubeId,
+              platform: extra.platform || row.format || 'youtube',
+              title: row.title || extra.title || 'Competition Video',
+              channelName: row.organizer || extra.channelName || 'Community Creator',
+              thumbnailUrl: row.banner_url || extra.thumbnailUrl || '',
+              category: extra.category || 'Football',
+              addedBy: extra.addedBy || 'Community Member',
+              createdAt: row.created_at ? row.created_at.split('T')[0] : (extra.createdAt || ''),
+            };
+          })
+          .filter((v: any) => Boolean(v.videoUrl && v.title && !deletedSet.has(v.id)));
 
-        // Keep local mirror updated
+        // Keep local mirror updated strictly without deleted videos
         await writeVideosToFile(cloudVideos);
-        return res.json({ success: true, videos: cloudVideos, source: 'cloud' });
+        return res.json({ success: true, videos: cloudVideos, deletedIds: deletedList, source: 'cloud' });
       }
 
       // 2. Fallback to local file if cloud temporarily unreachable
       const videos = await readVideosFromFile();
-      return res.json({ success: true, videos, source: 'file' });
+      const filtered = videos.filter((v: any) => !deletedSet.has(v.id));
+      return res.json({ success: true, videos: filtered, deletedIds: deletedList, source: 'file' });
     } catch (err: any) {
       console.warn('GET /api/videos error, falling back to disk:', err);
+      const deletedList = await readDeletedVideoIds();
+      const deletedSet = new Set(deletedList);
       const videos = await readVideosFromFile();
-      return res.json({ success: true, videos, source: 'file_fallback' });
+      const filtered = videos.filter((v: any) => !deletedSet.has(v.id));
+      return res.json({ success: true, videos: filtered, deletedIds: deletedList, source: 'file_fallback' });
     }
   });
 
@@ -356,24 +399,34 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
     }
   });
 
-  // DELETE /api/videos/:id - deletes a video across devices
+  // DELETE /api/videos/:id - permanently deletes a video across devices
   app.delete('/api/videos/:id', async (req, res) => {
     try {
       const { id } = req.params;
 
-      // 1. Delete from Supabase Cloud (mark as deleted)
-      try {
-        await supabase.from('tournaments').update({ status: 'deleted' }).eq('id', id);
-      } catch (cloudErr) {
-        console.warn('Supabase delete warning:', cloudErr);
-      }
+      // 1. Permanently record ID in persistent deleted tracker
+      const allDeleted = await recordDeletedVideoId(id);
 
-      // 2. Remove from local mirror
+      // 2. Remove from local mirror file
       const existing = await readVideosFromFile();
       const updated = existing.filter((v: any) => v.id !== id);
       await writeVideosToFile(updated);
 
-      return res.json({ success: true, message: 'Video removed successfully', videos: updated });
+      // 3. Mark as deleted and attempt hard delete in Supabase Cloud
+      try {
+        await supabase.from('tournaments').update({ status: 'deleted', title: '[DELETED]' }).eq('id', id);
+        await supabase.from('tournaments').delete().eq('id', id);
+      } catch (cloudErr) {
+        console.warn('Supabase delete warning:', cloudErr);
+      }
+
+      return res.json({
+        success: true,
+        message: 'Video removed successfully from all devices',
+        deletedId: id,
+        deletedIds: allDeleted,
+        videos: updated,
+      });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
