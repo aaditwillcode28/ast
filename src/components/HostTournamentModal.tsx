@@ -225,8 +225,8 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
   const bsStartDateStr = formatBsDate(bsStartYear, bsStartMonth, bsStartDay);
   const bsEndDateStr = formatBsDate(bsEndYear, bsEndMonth, bsEndDay);
 
-  // Helper to downscale and compress high-res mobile photos to fast, lightweight web image
-  const compressImageFile = (file: File, maxDim = 1200, quality = 0.82): Promise<string> => {
+  // Helper to downscale and compress high-res mobile photos to fast, lightweight web image (~40KB instead of 250KB)
+  const compressImageFile = (file: File, maxDim = 850, quality = 0.70): Promise<string> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {

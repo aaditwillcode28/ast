@@ -24,33 +24,49 @@ export interface CloudSyncResult {
   deletedIds: string[];
 }
 
-// 1. Fetch both active tournaments and deleted IDs from Supabase cloud
-export const fetchCloudTournamentsWithDeleted = async (): Promise<CloudSyncResult> => {
+// 1. Fetch both active tournaments and deleted IDs from Supabase cloud (with server-side cache proxy)
+export const fetchCloudTournamentsWithDeleted = async (forceFresh = false): Promise<CloudSyncResult> => {
   try {
-    const fetchPromise = supabase
-      .from('tournaments')
-      .select('*')
-      .order('created_at', { ascending: false });
+    let rows: any[] = [];
 
-    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch timeout' } }), 4000)
-    );
+    // 1. Try server-side cached endpoint first (ultra-fast <20ms, zero Supabase egress)
+    try {
+      const serverRes = await fetch(`/api/tournaments${forceFresh ? '?fresh=1' : ''}`);
+      if (serverRes.ok) {
+        const json = await serverRes.json();
+        if (json.success && Array.isArray(json.data)) {
+          rows = json.data;
+        }
+      }
+    } catch {}
 
-    const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+    // 2. Direct Supabase query as fallback (filtered to exclude community videos and deleted rows)
+    if (!rows || rows.length === 0) {
+      const fetchPromise = supabase
+        .from('tournaments')
+        .select('*')
+        .neq('category', 'COMMUNITY_VIDEO')
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      console.warn('Supabase fetch notice:', error.message);
-      return { activeTournaments: [], deletedIds: [] };
+      const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'Cloud fetch timeout' } }), 2500)
+      );
+
+      const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+      if (!error && Array.isArray(data)) {
+        rows = data;
+      }
     }
 
-    if (!data || data.length === 0) {
+    if (!rows || rows.length === 0) {
       return { activeTournaments: [], deletedIds: [] };
     }
 
     const deletedIds: string[] = [];
     const activeTournaments: Tournament[] = [];
 
-    for (const row of data) {
+    for (const row of rows) {
       const isVideoRow =
         row.category === 'COMMUNITY_VIDEO' ||
         row.category?.toLowerCase() === 'community_video' ||
@@ -61,9 +77,7 @@ export const fetchCloudTournamentsWithDeleted = async (): Promise<CloudSyncResul
         row.format === 'tiktok';
 
       if (row.status === 'deleted' || isVideoRow) {
-        if (row.status === 'deleted' || isVideoRow) {
-          deletedIds.push(row.id);
-        }
+        deletedIds.push(row.id);
         continue;
       }
 
@@ -141,35 +155,11 @@ export const fetchCloudTournaments = async (): Promise<Tournament[]> => {
 // 2. Publish a new tournament to Supabase (exact schema alignment)
 export const publishCloudTournament = async (tournament: Tournament): Promise<{ success: boolean; error?: string }> => {
   try {
-    // Pack rich frontend attributes into the rules JSON column so no information is lost
+    // Pack rich frontend attributes into the rules JSON column without duplicating huge base64 posters
     const extraMetadata = {
-      posterUrl: tournament.posterUrl,
-      calendarType: tournament.calendarType,
-      bsStartDate: tournament.bsStartDate,
-      bsEndDate: tournament.bsEndDate,
-      time: tournament.time,
-      location: tournament.location,
-      type: tournament.type,
-      ageGroup: tournament.ageGroup,
-      prizePool: tournament.prizePool,
-      hostOrg: tournament.hostOrg,
-      audienceAdmission: tournament.audienceAdmission,
-      isFeatured: tournament.isFeatured,
-      officialLink: tournament.officialLink,
-      isCharity: tournament.isCharity,
-      isReliefFund: tournament.isReliefFund,
-      donationLink: tournament.donationLink,
-      causeTitle: tournament.causeTitle,
-      reliefBankDetails: tournament.reliefBankDetails,
-      hostPaymentQrUrl: tournament.hostPaymentQrUrl,
-      hostPaymentMethod: tournament.hostPaymentMethod,
-      hostPaymentNumber: tournament.hostPaymentNumber,
-      hostPaymentInstructions: tournament.hostPaymentInstructions,
-      socialLinks: tournament.socialLinks,
-      whatsappGroupLink: tournament.whatsappGroupLink,
-      hostVerificationType: tournament.hostVerificationType,
-      transparencyNote: tournament.transparencyNote,
-      registrationDeadline: tournament.registrationDeadline,
+      ...tournament,
+      posterUrl: tournament.posterUrl?.startsWith('data:') ? undefined : tournament.posterUrl,
+      hostPaymentQrUrl: tournament.hostPaymentQrUrl?.startsWith('data:') ? undefined : tournament.hostPaymentQrUrl,
     };
 
     // Format safe date strings (YYYY-MM-DD)
@@ -214,6 +204,11 @@ export const publishCloudTournament = async (tournament: Tournament): Promise<{ 
       console.error('Supabase insert tournament error:', error.message);
       return { success: false, error: error.message };
     }
+
+    // Invalidate server proxy cache so all clients see new listing instantly
+    try {
+      await fetch('/api/tournaments/invalidate-cache', { method: 'POST' });
+    } catch {}
 
     return { success: true };
   } catch (err: any) {
@@ -287,6 +282,11 @@ export const deleteCloudTournament = async (tournamentId: string): Promise<boole
 
     // 2. Also attempt hard delete in case RLS allows
     await supabase.from('tournaments').delete().eq('id', tournamentId);
+
+    // Invalidate server proxy cache
+    try {
+      await fetch('/api/tournaments/invalidate-cache', { method: 'POST' });
+    } catch {}
 
     if (updateError) {
       console.warn('Failed to soft-delete tournament from cloud:', updateError.message);
@@ -382,11 +382,23 @@ export const markVideoAsDeletedLocally = (id: string): void => {
   } catch {}
 };
 
-// 8. Fetch community videos from global cloud database (True Cross-Device Sync)
-export const fetchCloudVideos = async (): Promise<CommunityVideo[]> => {
+// 8. Fetch community videos from global cloud database (True Cross-Device Sync with server caching)
+export const fetchCloudVideos = async (forceFresh = false): Promise<CommunityVideo[]> => {
   try {
     const localDeleted = getLocalDeletedVideoIds();
 
+    // 1. Try server cached API first (ultra-fast <20ms, zero Supabase egress)
+    try {
+      const res = await fetch(`/api/videos${forceFresh ? '?fresh=1' : ''}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.videos)) {
+          return json.videos.filter((v: CommunityVideo) => !localDeleted.has(v.id));
+        }
+      }
+    } catch {}
+
+    // 2. Direct Supabase query as fallback
     const { data, error } = await supabase
       .from('tournaments')
       .select('*')

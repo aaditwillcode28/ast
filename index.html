@@ -87,11 +87,6 @@
     }
     </script>
 
-    <!-- Anti-cache meta tags to prevent browsers from holding stale JavaScript builds -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
@@ -101,32 +96,70 @@
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased selection:bg-orange-500 selection:text-white min-h-screen font-sans">
     <div id="root">
-      <!-- Fallback shown if JavaScript bundle is blocked or fails to load from the hosting server -->
-      <div id="initial-loading-fallback" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f172a;color:#f8fafc;font-family:sans-serif;padding:24px;text-align:center;">
-        <div style="max-width:440px;background:#1e293b;border:1px solid #334155;border-radius:24px;padding:32px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-          <div style="width:48px;height:48px;border-radius:14px;background:#f97316;color:#ffffff;display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;margin-bottom:16px;">KT</div>
-          <h2 style="font-size:20px;font-weight:800;margin:0 0 8px 0;color:#ffffff;">KataTira Nepal</h2>
-          <p id="initial-loading-text" style="font-size:13px;color:#94a3b8;line-height:1.5;margin:0 0 16px 0;">Loading tournaments and competitions...</p>
-          <div id="initial-error-details" style="display:none;background:#090d16;border:1px solid #e11d48;border-radius:12px;padding:12px;text-align:left;font-family:monospace;font-size:11px;color:#fda4af;margin-bottom:16px;word-break:break-all;"></div>
-          <button id="initial-error-btn" style="display:none;width:100%;padding:10px 16px;background:#f97316;color:#ffffff;border:none;border-radius:12px;font-weight:700;font-size:12px;cursor:pointer;" onclick="if(window.caches){caches.keys().then(function(names){for(var name of names)caches.delete(name);});}window.location.href=window.location.pathname+'?v='+Date.now();">Update & Reload</button>
-        </div>
+      <!-- Instant Pre-Hydration Skeleton Shell: Shows brand & UI immediately on initial paint (0ms delay) -->
+      <div id="initial-loading-fallback" style="min-height: 100vh; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <!-- Navbar Header Skeleton -->
+        <header style="position: sticky; top: 0; z-index: 40; width: 100%; border-bottom: 1px solid #e2e8f0; background: rgba(255,255,255,0.95); backdrop-filter: blur(8px); padding: 12px 20px;">
+          <div style="max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 17px; box-shadow: 0 4px 10px rgba(249,115,22,0.3);">KT</div>
+              <div>
+                <div style="font-weight: 800; font-size: 16px; color: #0f172a; line-height: 1.2;">KataTira <span style="font-size: 11px; color: #f97316; font-weight: 700; background: #fff7ed; padding: 2px 6px; border-radius: 6px; border: 1px solid #ffedd5;">Nepal</span></div>
+                <div style="font-size: 10px; color: #64748b; font-weight: 600;">Verified Competitions & Tournaments</div>
+              </div>
+            </div>
+            <div style="flex: 1; max-width: 480px; height: 38px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; display: flex; align-items: center; padding: 0 14px;">
+              <span style="color: #94a3b8; font-size: 12px;">Search tournaments, categories, cities...</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="height: 36px; padding: 0 14px; border-radius: 10px; background: #f97316; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center;">+ Host Opportunity</div>
+            </div>
+          </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main style="max-width: 1400px; margin: 0 auto; padding: 20px;">
+          <!-- Category Pills Skeleton Strip -->
+          <div style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; margin-bottom: 24px;">
+            <div style="padding: 8px 18px; border-radius: 12px; background: #0f172a; color: #fff; font-size: 12px; font-weight: 700;">All Opportunities</div>
+            <div style="padding: 8px 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 600;">Football</div>
+            <div style="padding: 8px 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 600;">Basketball</div>
+            <div style="padding: 8px 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 600;">Cricket</div>
+            <div style="padding: 8px 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 600;">Esports</div>
+            <div style="padding: 8px 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 600;">Debate & MUN</div>
+            <div style="padding: 8px 16px; border-radius: 12px; background: #ffffff; border: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 600;">Relief & Charity</div>
+          </div>
+
+          <!-- Cards Grid Skeleton -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="height: 180px; background: linear-gradient(135deg, #e2e8f0, #cbd5e1); animation: pulse 1.8s infinite;"></div>
+              <div style="padding: 16px;">
+                <div style="height: 18px; width: 75%; background: #e2e8f0; border-radius: 6px; margin-bottom: 10px;"></div>
+                <div style="height: 14px; width: 45%; background: #f1f5f9; border-radius: 4px; margin-bottom: 16px;"></div>
+                <div style="height: 36px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"></div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="height: 180px; background: linear-gradient(135deg, #e2e8f0, #cbd5e1); animation: pulse 1.8s infinite;"></div>
+              <div style="padding: 16px;">
+                <div style="height: 18px; width: 80%; background: #e2e8f0; border-radius: 6px; margin-bottom: 10px;"></div>
+                <div style="height: 14px; width: 50%; background: #f1f5f9; border-radius: 4px; margin-bottom: 16px;"></div>
+                <div style="height: 36px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"></div>
+              </div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="height: 180px; background: linear-gradient(135deg, #e2e8f0, #cbd5e1); animation: pulse 1.8s infinite;"></div>
+              <div style="padding: 16px;">
+                <div style="height: 18px; width: 70%; background: #e2e8f0; border-radius: 6px; margin-bottom: 10px;"></div>
+                <div style="height: 14px; width: 40%; background: #f1f5f9; border-radius: 4px; margin-bottom: 16px;"></div>
+                <div style="height: 36px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"></div>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
-    <script>
-      // Capture any asset loading or execution failures so the screen is never blank
-      window.addEventListener('error', function(e) {
-        var el = document.getElementById('initial-error-details');
-        var txt = document.getElementById('initial-loading-text');
-        var btn = document.getElementById('initial-error-btn');
-        if (el && txt && btn) {
-          txt.textContent = 'A new version has been deployed. Please refresh:';
-          txt.style.color = '#fb7185';
-          el.style.display = 'block';
-          btn.style.display = 'block';
-          el.textContent = (e && e.message ? e.message : 'Please tap "Update & Reload" to fetch the latest platform update.');
-        }
-      }, true);
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

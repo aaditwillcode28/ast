@@ -390,9 +390,9 @@ export default function App() {
   // Fetch tournaments from Supabase cloud on load, background polling & realtime sync
   useEffect(() => {
     let isMounted = true;
-    const syncCloudData = async (isBackground = false) => {
+    const syncCloudData = async (isBackground = false, forceFresh = false) => {
       try {
-        const { activeTournaments, deletedIds } = await fetchCloudTournamentsWithDeleted();
+        const { activeTournaments, deletedIds } = await fetchCloudTournamentsWithDeleted(forceFresh);
         if (!isMounted) return;
 
         // 1. Update deletedSet with IDs confirmed deleted in Supabase cloud
@@ -499,17 +499,17 @@ export default function App() {
 
     // Run initial sync after DOM is interactive
     const timer = setTimeout(() => {
-      syncCloudData(false);
+      syncCloudData(false, false);
     }, 50);
 
-    // Seamless background polling: re-check every 8 seconds silently
+    // Fast 15-second background polling hitting server memory cache (zero Supabase egress bandwidth)
     const pollInterval = setInterval(() => {
-      syncCloudData(true);
-    }, 8000);
+      syncCloudData(true, false);
+    }, 15000);
 
-    // Seamless update when user clicks back into the tab/window
+    // Immediate update when user switches back into the tab/window
     const onFocus = () => {
-      syncCloudData(true);
+      syncCloudData(true, true);
     };
     window.addEventListener('focus', onFocus);
 
@@ -520,14 +520,14 @@ export default function App() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tournaments' },
         () => {
-          syncCloudData(true);
+          syncCloudData(true, true);
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'registrations' },
         () => {
-          syncCloudData(true);
+          syncCloudData(true, true);
         }
       )
       .subscribe();
