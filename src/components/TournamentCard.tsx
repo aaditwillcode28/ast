@@ -22,7 +22,9 @@ import {
   Building,
   CheckCircle2,
   Phone,
-  Images
+  Images,
+  ExternalLink,
+  Link as LinkIcon
 } from 'lucide-react';
 import { Tournament } from '../types';
 import { getEventPageUrl } from '../utils/seo';
@@ -127,7 +129,7 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
     tournament.reliefBankDetails
   );
 
-  const totalSlotsCount = tournament.totalTeams || tournament.totalSlots || 16;
+  const totalSlotsCount = tournament.totalTeams || tournament.totalSlots;
   const CategoryIcon = getCategoryIcon(tournament.category);
   const verificationBadge = getHostVerificationBadge(tournament);
 
@@ -189,6 +191,21 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
                 <span>FEATURED</span>
               </span>
             ) : null}
+
+            {/* Highly Noticeable Official Event Link Badge */}
+            {tournament.officialLink && (
+              <a
+                href={tournament.officialLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 rounded-lg bg-orange-600/90 hover:bg-orange-500 text-white px-2 py-0.5 text-[10px] font-extrabold border border-orange-400 shadow-md backdrop-blur-md transition-all hover:scale-105"
+                title="Direct Official Event Link"
+              >
+                <LinkIcon className="h-2.5 w-2.5" />
+                <span>Official Link ↗</span>
+              </a>
+            )}
 
             {tournament.province && (
               <span className="hidden sm:inline-flex items-center rounded-lg bg-slate-900/80 px-2 py-0.5 text-[10px] font-bold text-slate-200 border border-white/10 backdrop-blur-md">
@@ -408,8 +425,8 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
         ) : (
           (() => {
             const hasFormat = Boolean(tournament.type?.trim());
-            const hasSlots = Boolean(tournament.totalTeams && tournament.totalTeams > 0);
-            const hasFee = tournament.entryFee !== undefined && tournament.entryFee !== null;
+            const hasSlots = tournament.totalTeams !== undefined && tournament.totalTeams !== null && String(tournament.totalTeams).trim() !== '' && tournament.totalTeams !== 0 && tournament.totalTeams !== '0';
+            const hasFee = tournament.entryFee !== undefined && tournament.entryFee !== null && String(tournament.entryFee).trim() !== '';
 
             if (!hasFormat && !hasSlots && !hasFee) return null;
 
@@ -424,14 +441,18 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
                 {hasSlots && (
                   <div className="flex-1 min-w-[70px]">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Slots</span>
-                    <span className="text-xs font-bold text-slate-800 truncate block">{tournament.totalTeams} Slots</span>
+                    <span className="text-xs font-bold text-slate-800 truncate block">
+                      {typeof tournament.totalTeams === 'number' ? `${tournament.totalTeams} Slots` : tournament.totalTeams}
+                    </span>
                   </div>
                 )}
                 {hasFee && (
                   <div className="flex-1 min-w-[70px]">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Entry / Cost</span>
-                    <span className={`text-xs font-extrabold ${tournament.entryFee === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                      {tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`}
+                    <span className={`text-xs font-extrabold ${tournament.entryFee === 0 || tournament.entryFee === '0' || tournament.entryFee === 'FREE' ? 'text-emerald-600' : 'text-slate-900'}`}>
+                      {typeof tournament.entryFee === 'number'
+                        ? (tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`)
+                        : (tournament.entryFee || 'FREE')}
                     </span>
                   </div>
                 )}
@@ -464,7 +485,22 @@ export const TournamentCard: React.FC<TournamentCardProps> = ({
         )}
 
         {/* PRIMARY CTA - CLEAR & FOCUSED WITH VISUAL HOVER FEEDBACK */}
-        <div className="mt-auto pt-2 border-t border-slate-100">
+        <div className="mt-auto pt-2 border-t border-slate-100 flex flex-col gap-2">
+          {/* Dedicated High-Visibility Event Link Button */}
+          {tournament.officialLink && (
+            <a
+              href={tournament.officialLink}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl py-2 px-3 text-xs font-bold bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 transition-all duration-200 active:scale-[0.98] shadow-2xs group/link"
+              title="Open Official Event Link"
+            >
+              <LinkIcon className="h-3.5 w-3.5 text-orange-600" />
+              <span>Official Event Link</span>
+              <ExternalLink className="h-3 w-3 text-orange-500 ml-0.5" />
+            </a>
+          )}
           <a
             href={getEventPageUrl(tournament.id, tournament.title)}
             onClick={(e) => {

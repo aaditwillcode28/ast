@@ -131,7 +131,7 @@ export const HostPortalModal: React.FC<HostPortalModalProps> = ({
                     t.bsEndDate,
                     t.calendarType
                   );
-                  const totalTeamsCount = t.totalTeams || t.totalSlots || 16;
+                  const totalTeamsCount = t.totalTeams || t.totalSlots;
 
                   return (
                     <div
@@ -155,10 +155,10 @@ export const HostPortalModal: React.FC<HostPortalModalProps> = ({
                               {allRegistrations.filter((r) => r.tournamentId === t.id).length} Registered
                             </span>
                             <span className="text-xs font-semibold text-slate-700">
-                              {totalTeamsCount} Max Teams
+                              {totalTeamsCount ? `${totalTeamsCount} Max Teams` : 'Open / No Limit'}
                             </span>
                             <span className="text-xs font-bold text-slate-800">
-                              {t.entryFee === 0 ? 'FREE' : `Rs. ${t.entryFee.toLocaleString()}`}
+                              {typeof t.entryFee === 'number' ? (t.entryFee === 0 ? 'FREE' : `Rs. ${t.entryFee.toLocaleString()}`) : (t.entryFee || 'FREE')}
                             </span>
                           </div>
                           <h4 className="font-display text-base font-bold text-slate-900 mt-0.5">

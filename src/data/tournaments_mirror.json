@@ -1,0 +1,29 @@
+[
+  {
+    "id": "kt-1761913222378",
+    "title": "Acu Inter College Futsal Tournament",
+    "category": "Football",
+    "format": "5v5",
+    "status": "upcoming",
+    "start_date": "2026-11-22",
+    "end_date": "2026-11-22",
+    "time": "09:00 AM - 05:00 PM NPT",
+    "city": "Lalitpur",
+    "province": "Bagmati",
+    "venue": "Royal Sports Central, Sanagaun",
+    "registration_deadline": "2026-11-18",
+    "entry_fee": 5000,
+    "prize_pool": "Trophy & Certificates",
+    "max_participants": 0,
+    "current_participants": 0,
+    "description": "Call for registration: 01-4795339 / 4795439",
+    "rules": "{\"calendarType\":\"AD\",\"bsStartDate\":\"Mangsir 7, 2083 BS\",\"bsEndDate\":\"Mangsir 7, 2083 BS\",\"time\":\"09:00 AM - 05:00 PM NPT\",\"location\":\"Royal Sports Central, Sanagaun\",\"type\":\"5v5\",\"ageGroup\":\"College/University\",\"prizePool\":\"Trophy & Certificates\",\"hostOrg\":\"Australian Catholic University X professional Education Consultancy\",\"audienceAdmission\":\"Free for spectators\",\"isFeatured\":false,\"isCharity\":false,\"isReliefFund\":false,\"hostVerificationType\":\"admin\",\"registrationDeadline\":\"2026-11-18\"}",
+    "contact_email": "sincedyt@gmail.com",
+    "contact_phone": "01-4795339",
+    "organizer": "1st",
+    "is_verified": false,
+    "is_relief": false,
+    "relief_beneficiary": null,
+    "created_at": "2026-10-31T12:20:34.884471+00:00"
+  }
+]

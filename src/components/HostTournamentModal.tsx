@@ -374,56 +374,61 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
     } catch {}
   };
 
+  const isAdmin = Boolean(isPostedByAdmin || postAsAdmin || isAdminAuthenticated());
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title.trim()) {
-      setErrorMsg('Please provide a tournament title.');
-      return;
-    }
-
-    // STRICT COMPULSORY PHONE CHECK & NEPAL FORMAT
-    if (!hostPhone.trim()) {
-      setErrorMsg('Organizer contact phone number is compulsory. Please enter your mobile or WhatsApp number.');
-      return;
-    }
-    const digitsOnly = hostPhone.trim().replace(/\D/g, '');
-    if (digitsOnly.length < 8) {
-      setErrorMsg('Please enter a valid mobile number (at least 8-10 digits) for tournament coordination.');
-      return;
-    }
-    if (digitsOnly.length === 10 && !digitsOnly.startsWith('98') && !digitsOnly.startsWith('97') && !digitsOnly.startsWith('01')) {
-      setErrorMsg('Please enter a standard Nepal phone number (starting with 98 or 97, or 01 landline).');
-      return;
-    }
-
-    // Secondary phone validation if provided
-    if (hostPhoneSecondary.trim()) {
-      const secDigits = hostPhoneSecondary.trim().replace(/\D/g, '');
-      if (secDigits.length < 7) {
-        setErrorMsg('Please enter a valid secondary phone number or leave the field blank.');
-        return;
-      }
-    }
-
-    // Anti-Bot & Authenticity check for fresh submissions (bypassable when editing by verified admin/organizer)
-    if (!tournamentToEdit && !postAsAdmin) {
-      if (!captchaData.isVerified) {
-        setErrorMsg('Please solve the security challenge below to verify you are a human.');
+    // Standard user validation checks (completely bypassed for admin)
+    if (!isAdmin) {
+      if (!title.trim()) {
+        setErrorMsg('Please provide a tournament title.');
         return;
       }
 
-      if (!isOrganizerCertified) {
-        setErrorMsg('Please check the Organizer Authenticity & Scam Shield certification box before publishing.');
+      // STRICT COMPULSORY PHONE CHECK & NEPAL FORMAT FOR REGULAR USERS
+      if (!hostPhone.trim()) {
+        setErrorMsg('Organizer contact phone number is compulsory. Please enter your mobile or WhatsApp number.');
         return;
+      }
+      const digitsOnly = hostPhone.trim().replace(/\D/g, '');
+      if (digitsOnly.length < 8) {
+        setErrorMsg('Please enter a valid mobile number (at least 8-10 digits) for tournament coordination.');
+        return;
+      }
+      if (digitsOnly.length === 10 && !digitsOnly.startsWith('98') && !digitsOnly.startsWith('97') && !digitsOnly.startsWith('01')) {
+        setErrorMsg('Please enter a standard Nepal phone number (starting with 98 or 97, or 01 landline).');
+        return;
+      }
+
+      // Secondary phone validation if provided
+      if (hostPhoneSecondary.trim()) {
+        const secDigits = hostPhoneSecondary.trim().replace(/\D/g, '');
+        if (secDigits.length < 7) {
+          setErrorMsg('Please enter a valid secondary phone number or leave the field blank.');
+          return;
+        }
+      }
+
+      // Anti-Bot & Authenticity check for regular user submissions
+      if (!tournamentToEdit) {
+        if (!captchaData.isVerified) {
+          setErrorMsg('Please solve the security challenge below to verify you are a human.');
+          return;
+        }
+
+        if (!isOrganizerCertified) {
+          setErrorMsg('Please check the Organizer Authenticity & Scam Shield certification box before publishing.');
+          return;
+        }
       }
     }
 
     setErrorMsg('');
     setIsSubmitting(true);
 
-    // Server-Side Security Check for new submissions
-    if (!tournamentToEdit && !postAsAdmin) {
+    // Server-Side Security Check for new regular submissions (bypassed for admin)
+    if (!tournamentToEdit && !isAdmin) {
       try {
         const secRes = await fetch('/api/security/verify-submission', {
           method: 'POST',
@@ -457,10 +462,23 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
       if (whatsapp.trim()) socialLinks.whatsapp = whatsapp.trim();
       if (website.trim()) socialLinks.website = website.trim().startsWith('http') ? website.trim() : `https://${website.trim()}`;
 
+      const parsedEntryFee = typeof entryFee === 'string' && entryFee.trim() !== ''
+        ? (!isNaN(Number(entryFee.trim())) ? Number(entryFee.trim()) : entryFee.trim())
+        : (typeof entryFee === 'number' ? entryFee : 0);
+
+      const parsedTotalTeams = (hasNoSlots || isCharity || totalTeams === '' || totalTeams === undefined)
+        ? undefined
+        : (typeof totalTeams === 'string' && !isNaN(Number(totalTeams.trim()))
+            ? Number(totalTeams.trim())
+            : (typeof totalTeams === 'string' ? totalTeams.trim() : totalTeams));
+
+      const effectiveTitle = title.trim() || (isAdmin ? 'Tournament / Event' : 'Untitled Event');
+      const effectiveHostPhone = hostPhone.trim() || (isAdmin ? 'Direct Coordinator' : '');
+
       const savedTournament: Tournament = {
         ...(tournamentToEdit || {}),
         id: tournamentToEdit ? tournamentToEdit.id : `kt-${Date.now()}`,
-        title: title.trim(),
+        title: effectiveTitle,
         category: isCharity ? 'Charity & Relief' : effectiveCategory,
         posterUrl: posterPhotos.length > 0 ? posterPhotos[0] : (posterUrl || DEFAULT_POSTER_FALLBACK),
         posterUrls: posterPhotos.length > 0 ? posterPhotos : [posterUrl || DEFAULT_POSTER_FALLBACK],
@@ -477,19 +495,19 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
         province: province,
         stateCountry: `${province}, Nepal`,
         type: isCharity ? (effectiveFormat || 'Flood Relief / Charity') : (effectiveFormat || 'Open Format'),
-        entryFee: Number(entryFee) || 0,
+        entryFee: parsedEntryFee,
         ageGroup: effectiveAge || 'Open',
         prizePool: (isCharity || hasNoSlots) ? (prizePool.trim() || 'Direct Emergency Aid & Community Rehabilitation') : (prizePool.trim() || 'Trophy & Certificates'),
-        hasNoSlots: hasNoSlots || isCharity || totalTeams === '' || Number(totalTeams) === 0,
+        hasNoSlots: hasNoSlots || isCharity || parsedTotalTeams === undefined || parsedTotalTeams === 0,
         isReliefFund: isCharity || effectiveCategory === 'Charity & Relief',
-        totalTeams: (hasNoSlots || isCharity || totalTeams === '') ? 0 : (Number(totalTeams) > 0 ? Number(totalTeams) : 0),
+        totalTeams: parsedTotalTeams,
         registeredTeamsCount: tournamentToEdit ? (tournamentToEdit.registeredTeamsCount || 0) : 0,
         postedByAdmin: Boolean(isPostedByAdmin || postAsAdmin || tournamentToEdit?.postedByAdmin),
         hostVerificationType: (isPostedByAdmin || postAsAdmin || tournamentToEdit?.postedByAdmin) ? 'admin' : tournamentToEdit?.hostVerificationType,
         hostName: hostName.trim() || 'Lead Organizer',
         hostOrg: hostOrg.trim() || undefined,
         hostEmail: hostEmail.trim() || 'organizer@katatira.np',
-        hostPhone: hostPhone.trim(),
+        hostPhone: effectiveHostPhone,
         hostPhoneSecondary: hostPhoneSecondary.trim() || undefined,
         secondaryPhone: hostPhoneSecondary.trim() || undefined,
         description: description.trim() ? description.trim() : undefined,
@@ -759,6 +777,26 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className={`flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 ${activeModalTab === 'preview' ? 'hidden' : 'block'}`}>
+          {/* Admin Unrestricted Mode Banner */}
+          {isAdmin && (
+            <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 p-4 flex items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-amber-400 font-bold shadow-xs">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-display text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <span>Admin Unrestricted Hosting Active</span>
+                    <span className="rounded bg-slate-900 text-amber-400 text-[10px] font-mono px-2 py-0.5">Admin Freedom</span>
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    No options or fields are compulsory. You may type letters and words into numeric fields (Entry Fee, Total Teams, Phone, etc.).
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* LEFT COLUMN (7 cols) */}
             <div className="lg:col-span-7 space-y-5">
@@ -1038,11 +1076,11 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Event Title *
+                    Event Title {!isAdmin && '*'} {isAdmin && <span className="text-orange-600 font-normal">(Optional for Admin)</span>}
                   </label>
                   <input
                     type="text"
-                    required
+                    required={!isAdmin}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. All-Nepal Futsal Cup, Valley Basketball League, Kathmandu MUN"
@@ -1090,7 +1128,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Eligibility / Age *
+                      Eligibility / Age {!isAdmin && '*'}
                     </label>
                     <select
                       value={ageSelect}
@@ -1140,31 +1178,21 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                   <span className="text-[10px] text-slate-400 font-medium">e.g. disaster funds, rallies</span>
                 </div>
 
-                {/* Entry Fee & Total Teams */}
+                {/* Entry Fee & Total Teams (Text fields - can type numbers or letters e.g. 'Rs. 500 / team', '16-32 Teams') */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      {hasNoSlots || isCharity ? 'Registration / Donation Fee (Rs.)' : 'Entry Fee (Rs. NPR)'}
+                      {hasNoSlots || isCharity ? 'Registration / Donation Fee' : 'Entry Fee (NPR)'}
                     </label>
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
                       value={entryFee}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '') {
-                          setEntryFee('');
-                        } else {
-                          // Strip leading zeros like '020' -> 20
-                          const parsed = Number(val);
-                          setEntryFee(isNaN(parsed) ? '' : parsed);
-                        }
-                      }}
-                      placeholder="0 (Free entry)"
+                      onChange={(e) => setEntryFee(e.target.value)}
+                      placeholder="e.g. 500, Rs. 1,000 / squad, or Free"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                     <span className="text-[10px] text-slate-400">
-                      {hasNoSlots || isCharity ? 'Leave blank or 0 for voluntary donation' : 'Leave blank or 0 for free entry'}
+                      Accepts numbers or letters. Leave blank or 0 for free entry.
                     </span>
                   </div>
 
@@ -1178,24 +1206,15 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       </div>
                     ) : (
                       <input
-                        type="number"
+                        type="text"
                         value={totalTeams}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '') {
-                            setTotalTeams('');
-                          } else {
-                            // Strip leading zeros like '020' -> 20
-                            const parsed = Number(val);
-                            setTotalTeams(isNaN(parsed) ? '' : parsed);
-                          }
-                        }}
-                        placeholder="Optional (e.g. 16, 24, 32 or leave blank)"
+                        onChange={(e) => setTotalTeams(e.target.value)}
+                        placeholder="Optional (e.g. 16, 24-32 Teams, or blank for unlimited)"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                       />
                     )}
                     <span className="text-[10px] text-slate-400">
-                      Leave blank if there is no team limit or slots are open.
+                      Accepts numbers or letters. Leave blank if there are no slots.
                     </span>
                   </div>
                 </div>
@@ -1269,11 +1288,11 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1">
-                          Start Date (AD) *
+                          Start Date (AD) {!isAdmin && '*'}
                         </label>
                         <input
                           type="date"
-                          required
+                          required={!isAdmin}
                           value={startDate}
                           onChange={(e) => {
                             setStartDate(e.target.value);
@@ -1288,11 +1307,11 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
                       <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1">
-                          End Date (AD) *
+                          End Date (AD) {!isAdmin && '*'}
                         </label>
                         <input
                           type="date"
-                          required
+                          required={!isAdmin}
                           value={endDate}
                           min={startDate}
                           onChange={(e) => setEndDate(e.target.value)}
@@ -1739,15 +1758,15 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
                   <div>
                     <label className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
-                      <span>Primary Phone (Nepal) <strong className="text-rose-600 font-bold">*</strong></span>
+                      <span>Primary Phone (Nepal) {!isAdmin && <strong className="text-rose-600 font-bold">*</strong>} {isAdmin && <span className="text-orange-600 font-normal">(Optional for Admin)</span>}</span>
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">🌐 Public</span>
                     </label>
                     <input
-                      type="tel"
-                      required
+                      type="text"
+                      required={!isAdmin}
                       value={hostPhone}
                       onChange={(e) => setHostPhone(e.target.value)}
-                      placeholder="e.g. +977 9841234567"
+                      placeholder="e.g. +977 9841234567 or Contact Desk"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-orange-500 focus:outline-none"
                     />
                     <p className="text-[10px] text-slate-400 mt-0.5">
@@ -1855,7 +1874,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                       <div>
                         <span className="text-[9px] text-slate-400 block font-bold">TOTAL TEAMS</span>
                         <span className="font-bold text-slate-900">
-                          {totalTeams !== '' && Number(totalTeams) > 0 ? `${totalTeams} Teams` : 'Open / No Limit'}
+                          {totalTeams !== '' && totalTeams !== undefined ? `${totalTeams} Teams` : 'Open / No Limit'}
                         </span>
                       </div>
                     </div>
@@ -1863,7 +1882,9 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                     <div className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
                       <span className="text-slate-500 font-medium">Entry Fee:</span>
                       <span className="font-bold text-orange-600">
-                        {entryFee === '' || Number(entryFee) === 0 ? 'FREE' : `Rs. ${Number(entryFee).toLocaleString()}`} (No Extra Fees)
+                        {typeof entryFee === 'number'
+                          ? (entryFee === 0 ? 'FREE' : `Rs. ${entryFee.toLocaleString()}`)
+                          : (entryFee || 'FREE')} (No Extra Fees)
                       </span>
                     </div>
 
@@ -1877,7 +1898,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
                         type="button"
                         className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-orange-500 transition-colors"
                       >
-                        Register Team ({entryFee === 0 ? 'FREE' : `Rs. ${entryFee.toLocaleString()}`})
+                        Register Team ({typeof entryFee === 'number' ? (entryFee === 0 ? 'FREE' : `Rs. ${entryFee.toLocaleString()}`) : (entryFee || 'FREE')})
                       </button>
                     </div>
                   </div>
@@ -1931,15 +1952,15 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
               <label className="flex items-start gap-3 cursor-pointer select-none">
                 <input
                   type="checkbox"
-                  required
-                  checked={isOrganizerCertified}
+                  required={!isAdmin}
+                  checked={isOrganizerCertified || isAdmin}
                   onChange={(e) => setIsOrganizerCertified(e.target.checked)}
                   className="h-5 w-5 mt-0.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                 />
                 <div className="text-xs text-slate-700 leading-relaxed">
                   <span className="font-bold text-slate-900 block flex items-center gap-1.5">
                     <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                    Organizer Authenticity & Anti-Scam Shield Certification
+                    Organizer Authenticity & Anti-Scam Shield Certification {!isAdmin && '*'}
                   </span>
                   <span className="text-[11px] text-slate-600 block mt-1">
                     I solemnly certify that I am the verified organizer or authorized committee member of this event in Nepal. All venue locations, tournament dates, entry fees, and prize amounts listed are genuine. I understand that posting fake events, unauthorized fee collection, or impersonation is strictly prohibited and subject to immediate blacklisting and reporting to the Nepal Police Cyber Bureau.
@@ -1969,7 +1990,7 @@ export const HostTournamentModal: React.FC<HostTournamentModalProps> = ({
 
             <button
               type="submit"
-              disabled={isSubmitting || (!tournamentToEdit && (!captchaData.isVerified || !isOrganizerCertified))}
+              disabled={isSubmitting || (!tournamentToEdit && !isAdmin && (!captchaData.isVerified || !isOrganizerCertified))}
               className="flex items-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (

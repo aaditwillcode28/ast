@@ -497,10 +497,8 @@ export default function App() {
       }
     };
 
-    // Run initial sync after DOM is interactive
-    const timer = setTimeout(() => {
-      syncCloudData(false, false);
-    }, 50);
+    // Run initial sync immediately on mount (zero delay)
+    syncCloudData(false, false);
 
     // Fast 15-second background polling hitting server memory cache (zero Supabase egress bandwidth)
     const pollInterval = setInterval(() => {
@@ -534,7 +532,6 @@ export default function App() {
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
       clearInterval(pollInterval);
       window.removeEventListener('focus', onFocus);
       supabase.removeChannel(channel);

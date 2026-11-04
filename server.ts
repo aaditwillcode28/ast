@@ -283,10 +283,63 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
     }
   }
 
+  const tournamentsFilePath = path.resolve(dataDir, 'tournaments_mirror.json');
+
+  async function readTournamentsFromFile(): Promise<any[]> {
+    try {
+      if (!fs.existsSync(tournamentsFilePath)) {
+        return [];
+      }
+      const raw = await fs.promises.readFile(tournamentsFilePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function writeTournamentsToFile(tournaments: any[]): Promise<void> {
+    try {
+      await fs.promises.writeFile(tournamentsFilePath, JSON.stringify(tournaments, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Error writing tournaments_mirror.json:', err);
+    }
+  }
+
   // High-performance in-memory cache (eliminates 99% of Supabase egress bandwidth and accelerates load times)
   let cachedVideosResponse: { data: any; timestamp: number } | null = null;
   let cachedTournamentsResponse: { data: any; timestamp: number } | null = null;
   const CACHE_TTL_MS = 25000; // 25-second server memory cache across connecting devices
+
+  // Pre-warm tournaments cache on boot from disk mirror so first load is 0ms
+  try {
+    const initialTournaments = await readTournamentsFromFile();
+    if (initialTournaments.length > 0) {
+      cachedTournamentsResponse = {
+        data: { success: true, data: initialTournaments, source: 'disk_mirror' },
+        timestamp: Date.now(),
+      };
+    }
+  } catch {}
+
+  // Background refresh on server start
+  (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .neq('category', 'COMMUNITY_VIDEO')
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        await writeTournamentsToFile(data);
+        cachedTournamentsResponse = {
+          data: { success: true, data, source: 'supabase_cached' },
+          timestamp: Date.now(),
+        };
+      }
+    } catch {}
+  })();
 
   // GET /api/tournaments - cached server proxy to protect Supabase bandwidth & accelerate load times
   app.get('/api/tournaments', async (req, res) => {
@@ -307,21 +360,46 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
         if (cachedTournamentsResponse) {
           return res.json(cachedTournamentsResponse.data);
         }
+        const diskFallback = await readTournamentsFromFile();
+        if (diskFallback.length > 0) {
+          return res.json({ success: true, data: diskFallback, source: 'disk_fallback' });
+        }
         return res.status(500).json({ success: false, error: error.message });
       }
 
       const responsePayload = { success: true, data: data || [], source: 'supabase_cached' };
       cachedTournamentsResponse = { data: responsePayload, timestamp: Date.now() };
+      // Keep disk mirror updated asynchronously
+      writeTournamentsToFile(data || []).catch(() => {});
       return res.json(responsePayload);
     } catch (err: any) {
       if (cachedTournamentsResponse) return res.json(cachedTournamentsResponse.data);
+      const diskFallback = await readTournamentsFromFile();
+      if (diskFallback.length > 0) {
+        return res.json({ success: true, data: diskFallback, source: 'disk_fallback' });
+      }
       return res.status(500).json({ success: false, error: err.message });
     }
   });
 
   // POST /api/tournaments/invalidate-cache
-  app.post('/api/tournaments/invalidate-cache', (_req, res) => {
+  app.post('/api/tournaments/invalidate-cache', async (_req, res) => {
     cachedTournamentsResponse = null;
+    try {
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .neq('category', 'COMMUNITY_VIDEO')
+        .neq('status', 'deleted')
+        .order('created_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        await writeTournamentsToFile(data);
+        cachedTournamentsResponse = {
+          data: { success: true, data, source: 'supabase_cached' },
+          timestamp: Date.now(),
+        };
+      }
+    } catch {}
     return res.json({ success: true, message: 'Tournaments cache cleared' });
   });
 

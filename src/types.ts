@@ -40,11 +40,11 @@ export interface Tournament {
   stateCountry: string;
   type: string;
   teamSize?: string;
-  entryFee: number;
+  entryFee: number | string;
   ageGroup: string;
   prizePool: string;
-  totalTeams: number;
-  totalSlots?: number;
+  totalTeams?: number | string;
+  totalSlots?: number | string;
   hasNoSlots?: boolean;
   isReliefFund?: boolean;
   registeredTeamsCount: number;

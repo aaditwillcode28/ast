@@ -14,6 +14,7 @@ import {
   Users,
   Heart,
   HeartHandshake,
+  Link as LinkIcon,
   CircleDot,
   MessageSquare,
   Briefcase,
@@ -193,7 +194,7 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
     tournament.totalTeams === 0
   );
 
-  const totalTeamsCount = tournament.totalTeams || tournament.totalSlots || 16;
+  const totalTeamsCount = tournament.totalTeams || tournament.totalSlots;
   const CategoryIcon = getCategoryIcon(tournament.category);
 
   return (
@@ -410,6 +411,40 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 <RegistrationCountdown deadline={tournament.registrationDeadline} variant="modal-banner" />
               )}
 
+              {/* HIGH-VISIBILITY OFFICIAL EVENT PORTAL / WEBSITE LINK BANNER */}
+              {tournament.officialLink && (
+                <div className="rounded-2xl border-2 border-orange-300 bg-gradient-to-r from-orange-500/10 via-amber-500/15 to-orange-500/10 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md shadow-orange-500/5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white shadow-md">
+                      <LinkIcon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 text-orange-800 text-[10px] font-black uppercase px-2 py-0.5 tracking-wider">
+                          Official Event Link
+                        </span>
+                        <span className="text-[11px] text-orange-700 font-semibold">• Direct Organizer Page</span>
+                      </div>
+                      <h4 className="font-display font-bold text-sm sm:text-base text-slate-900 leading-tight mt-0.5 truncate">
+                        Official Tournament Portal & Information
+                      </h4>
+                      <p className="text-xs text-slate-600 font-mono truncate max-w-md sm:max-w-lg mt-0.5">
+                        {tournament.officialLink}
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={tournament.officialLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs sm:text-sm px-5 py-2.5 shadow-md shadow-orange-500/25 transition-all hover:scale-105 active:scale-95 shrink-0 w-full sm:w-auto"
+                  >
+                    <span>Open Event Link</span>
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              )}
+
               {/* FLOOD RELIEF & CHARITY BANNER IF APPLICABLE */}
               {tournament.isCharity && (
                 <div className="rounded-2xl border-2 border-rose-300 bg-rose-50/90 p-4 sm:p-5 space-y-3">
@@ -489,8 +524,8 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 (() => {
                   const hasFormat = Boolean(tournament.type?.trim());
                   const hasAge = Boolean(tournament.ageGroup?.trim());
-                  const hasTeams = Boolean(tournament.totalTeams && tournament.totalTeams > 0);
-                  const hasFee = tournament.entryFee !== undefined && tournament.entryFee !== null;
+                  const hasTeams = tournament.totalTeams !== undefined && tournament.totalTeams !== null && String(tournament.totalTeams).trim() !== '' && tournament.totalTeams !== 0 && tournament.totalTeams !== '0';
+                  const hasFee = tournament.entryFee !== undefined && tournament.entryFee !== null && String(tournament.entryFee).trim() !== '';
 
                   if (!hasFormat && !hasAge && !hasTeams && !hasFee) return null;
 
@@ -513,7 +548,9 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                       {hasTeams && (
                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
                           <span className="text-[10px] font-bold text-slate-400 uppercase">Total Teams</span>
-                          <p className="mt-1 font-display text-base sm:text-lg font-bold text-slate-900 truncate">{tournament.totalTeams} Teams</p>
+                          <p className="mt-1 font-display text-base sm:text-lg font-bold text-slate-900 truncate">
+                            {typeof tournament.totalTeams === 'number' ? `${tournament.totalTeams} Teams` : tournament.totalTeams}
+                          </p>
                         </div>
                       )}
 
@@ -521,7 +558,9 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
                           <span className="text-[10px] font-bold text-slate-400 uppercase">Entry Fee</span>
                           <p className="mt-1 font-display text-base sm:text-lg font-extrabold text-slate-900">
-                            {tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`}
+                            {typeof tournament.entryFee === 'number'
+                              ? (tournament.entryFee === 0 ? 'FREE' : `Rs. ${tournament.entryFee.toLocaleString()}`)
+                              : (tournament.entryFee || 'FREE')}
                           </p>
                         </div>
                       )}
@@ -979,9 +1018,9 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
               <span className="text-xl sm:text-2xl font-black text-slate-900">
                 {isNoSlotsEvent
                   ? 'VOLUNTARY AID'
-                  : tournament.entryFee === 0
-                    ? 'FREE ENTRY'
-                    : `Rs. ${tournament.entryFee.toLocaleString()}`}
+                  : typeof tournament.entryFee === 'number'
+                    ? (tournament.entryFee === 0 ? 'FREE ENTRY' : `Rs. ${tournament.entryFee.toLocaleString()}`)
+                    : (tournament.entryFee || 'FREE ENTRY')}
               </span>
             </div>
             <div className="h-8 w-px bg-slate-200 hidden sm:block" />
@@ -1001,10 +1040,12 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 href={tournament.officialLink}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-800 hover:text-orange-600 hover:border-orange-300 transition-colors shadow-2xs"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 text-xs font-bold transition-all shadow-md shadow-orange-500/25 active:scale-95 shrink-0"
+                title="Open Official Event Link in new tab"
               >
-                <span>{isNoSlotsEvent ? 'Relief Portal' : 'Event Link'}</span>
-                <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                <LinkIcon className="h-3.5 w-3.5" />
+                <span>{isNoSlotsEvent ? 'Relief Portal' : 'Official Event Link'}</span>
+                <ExternalLink className="h-3.5 w-3.5" />
               </a>
             )}
 

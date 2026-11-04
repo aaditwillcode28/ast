@@ -243,7 +243,7 @@ export const RegistrationPaymentModal: React.FC<RegistrationPaymentModalProps> =
                 <span>{tournament.ageGroup}</span>
                 <span>•</span>
                 <span className="text-orange-600 font-bold">
-                  {isFree ? 'Free Entry' : `Rs. ${tournament.entryFee.toLocaleString()} (No Extra Fees)`}
+                  {isFree ? 'Free Entry' : (typeof tournament.entryFee === 'number' ? `Rs. ${tournament.entryFee.toLocaleString()} (No Extra Fees)` : `Rs. ${tournament.entryFee} (No Extra Fees)`)}
                 </span>
               </div>
             </div>
@@ -530,7 +530,7 @@ export const RegistrationPaymentModal: React.FC<RegistrationPaymentModalProps> =
                 <div>
                   <span className="text-slate-500 block">Total Amount Paid to Host:</span>
                   <span className="text-lg font-bold text-orange-600">
-                    Rs. {totalAmount.toLocaleString()}
+                    {typeof totalAmount === 'number' ? `Rs. ${totalAmount.toLocaleString()}` : (String(totalAmount).startsWith('Rs') ? totalAmount : `Rs. ${totalAmount}`)}
                   </span>
                 </div>
                 <span className="text-slate-500 font-medium text-[11px]">

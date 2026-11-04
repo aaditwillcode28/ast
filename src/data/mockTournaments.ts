@@ -5,7 +5,41 @@ import { Tournament } from '../types';
  * Real, authentic opportunities and tournaments in Nepal are hosted directly
  * by verified organizers, schools, colleges, and clubs through the "Host Opportunity" portal.
  */
-export const INITIAL_TOURNAMENTS: Tournament[] = [];
+export const INITIAL_TOURNAMENTS: Tournament[] = [
+  {
+    id: "kt-1761913222378",
+    title: "Acu Inter College Futsal Tournament",
+    category: "Football",
+    posterUrl: "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&q=80&w=1200",
+    posterUrls: ["https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&q=80&w=1200"],
+    startDate: "2026-11-22",
+    endDate: "2026-11-22",
+    calendarType: "AD",
+    bsStartDate: "Mangsir 7, 2083 BS",
+    bsEndDate: "Mangsir 7, 2083 BS",
+    date: "2026-11-22",
+    time: "09:00 AM - 05:00 PM NPT",
+    registrationDeadline: "2026-11-18",
+    location: "Royal Sports Central, Sanagaun",
+    city: "Lalitpur",
+    province: "Bagmati",
+    stateCountry: "Bagmati, Nepal",
+    type: "5v5",
+    entryFee: 5000,
+    ageGroup: "College/University",
+    prizePool: "Trophy & Certificates",
+    registeredTeamsCount: 0,
+    hostOrg: "Australian Catholic University X professional Education Consultancy",
+    hostName: "Lead Organizer",
+    hostEmail: "sincedyt@gmail.com",
+    hostPhone: "01-4795339",
+    audienceAdmission: "Free for spectators",
+    description: "Call for registration: 01-4795339 / 4795439",
+    createdAt: "2026-10-31T12:20:34.884471+00:00",
+    postedByAdmin: true,
+    hostVerificationType: "admin"
+  }
+];
 
 /**
  * Known legacy demo / placeholder event IDs to purge from visitors' local storage caches.
