@@ -311,12 +311,52 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
   let cachedTournamentsResponse: { data: any; timestamp: number } | null = null;
   const CACHE_TTL_MS = 25000; // 25-second server memory cache across connecting devices
 
+  // Check if tournament registration has ended (end-of-day in Nepal UTC+5:45)
+  function parseServerDeadlineTs(dateStr?: string): number | null {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    const trimmed = dateStr.trim();
+    if (!trimmed) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const d = new Date(`${trimmed}T23:59:59+05:45`);
+      return isNaN(d.getTime()) ? null : d.getTime();
+    }
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  function isServerRegistrationEnded(row: any): boolean {
+    if (!row) return false;
+    if (row.is_relief || row.category === 'Charity & Relief') {
+      return false;
+    }
+    let extra: any = {};
+    if (row.rules && typeof row.rules === 'string' && row.rules.startsWith('{')) {
+      try { extra = JSON.parse(row.rules); } catch {}
+    }
+    if (extra.isReliefFund || extra.isCharity) {
+      return false;
+    }
+    const now = Date.now();
+    const deadline = row.registration_deadline || extra.registrationDeadline;
+    if (deadline) {
+      const ts = parseServerDeadlineTs(deadline);
+      if (ts && now > ts) return true;
+    }
+    const eventDate = row.end_date || row.start_date || extra.endDate || extra.startDate || extra.date;
+    if (eventDate) {
+      const ts = parseServerDeadlineTs(eventDate);
+      if (ts && now > ts) return true;
+    }
+    return false;
+  }
+
   // Pre-warm tournaments cache on boot from disk mirror so first load is 0ms
   try {
     const initialTournaments = await readTournamentsFromFile();
-    if (initialTournaments.length > 0) {
+    const activeInitial = initialTournaments.filter((r: any) => !isServerRegistrationEnded(r));
+    if (activeInitial.length > 0) {
       cachedTournamentsResponse = {
-        data: { success: true, data: initialTournaments, source: 'disk_mirror' },
+        data: { success: true, data: activeInitial, source: 'disk_mirror' },
         timestamp: Date.now(),
       };
     }
@@ -332,9 +372,10 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
         .neq('status', 'deleted')
         .order('created_at', { ascending: false });
       if (!error && Array.isArray(data)) {
-        await writeTournamentsToFile(data);
+        const activeRows = data.filter((r: any) => !isServerRegistrationEnded(r));
+        await writeTournamentsToFile(activeRows);
         cachedTournamentsResponse = {
-          data: { success: true, data, source: 'supabase_cached' },
+          data: { success: true, data: activeRows, source: 'supabase_cached' },
           timestamp: Date.now(),
         };
       }
@@ -361,22 +402,25 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
           return res.json(cachedTournamentsResponse.data);
         }
         const diskFallback = await readTournamentsFromFile();
-        if (diskFallback.length > 0) {
-          return res.json({ success: true, data: diskFallback, source: 'disk_fallback' });
+        const activeFallback = diskFallback.filter((r: any) => !isServerRegistrationEnded(r));
+        if (activeFallback.length > 0) {
+          return res.json({ success: true, data: activeFallback, source: 'disk_fallback' });
         }
         return res.status(500).json({ success: false, error: error.message });
       }
 
-      const responsePayload = { success: true, data: data || [], source: 'supabase_cached' };
+      const activeRows = (data || []).filter((r: any) => !isServerRegistrationEnded(r));
+      const responsePayload = { success: true, data: activeRows, source: 'supabase_cached' };
       cachedTournamentsResponse = { data: responsePayload, timestamp: Date.now() };
-      // Keep disk mirror updated asynchronously
-      writeTournamentsToFile(data || []).catch(() => {});
+      // Keep disk mirror updated asynchronously with only active tournaments
+      writeTournamentsToFile(activeRows).catch(() => {});
       return res.json(responsePayload);
     } catch (err: any) {
       if (cachedTournamentsResponse) return res.json(cachedTournamentsResponse.data);
       const diskFallback = await readTournamentsFromFile();
-      if (diskFallback.length > 0) {
-        return res.json({ success: true, data: diskFallback, source: 'disk_fallback' });
+      const activeFallback = diskFallback.filter((r: any) => !isServerRegistrationEnded(r));
+      if (activeFallback.length > 0) {
+        return res.json({ success: true, data: activeFallback, source: 'disk_fallback' });
       }
       return res.status(500).json({ success: false, error: err.message });
     }
@@ -393,9 +437,10 @@ Return only valid JSON. Do not include markdown codeblocks or conversational tex
         .neq('status', 'deleted')
         .order('created_at', { ascending: false });
       if (!error && Array.isArray(data)) {
-        await writeTournamentsToFile(data);
+        const activeRows = data.filter((r: any) => !isServerRegistrationEnded(r));
+        await writeTournamentsToFile(activeRows);
         cachedTournamentsResponse = {
-          data: { success: true, data, source: 'supabase_cached' },
+          data: { success: true, data: activeRows, source: 'supabase_cached' },
           timestamp: Date.now(),
         };
       }

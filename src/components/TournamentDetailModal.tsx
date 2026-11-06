@@ -38,7 +38,8 @@ import {
   Image as ImageIcon,
   Images,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle
 } from 'lucide-react';
 import { Tournament } from '../types';
 import { formatEventDates } from '../utils/textFormat';
@@ -46,7 +47,7 @@ import { submitEventReport, isAdminAuthenticated } from '../utils/activityTracke
 import { getGoogleCalendarUrl, downloadIcsFile, getWhatsAppShareUrl, shareTournament } from '../utils/calendarAndShare';
 import { getHostVerificationBadge } from './TournamentCard';
 import { RegistrationCountdown } from './RegistrationCountdown';
-import { calculateTimeRemaining } from '../utils/countdown';
+import { calculateTimeRemaining, isEventRegistrationEnded } from '../utils/countdown';
 
 interface TournamentDetailModalProps {
   tournament: Tournament | null;
@@ -406,10 +407,18 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 )}
               </div>
 
-              {/* REGISTRATION DEADLINE LIVE COUNTDOWN BANNER */}
-              {tournament.registrationDeadline && (
+              {/* REGISTRATION DEADLINE LIVE COUNTDOWN OR ENDED BANNER */}
+              {isEventRegistrationEnded(tournament) ? (
+                <div className="rounded-2xl border border-rose-300 bg-rose-50/90 p-3.5 sm:p-4 flex items-center gap-3 text-rose-900 shadow-2xs">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600" />
+                  <div className="text-xs">
+                    <span className="font-bold text-sm block text-rose-950">Registration Ended</span>
+                    <span className="text-rose-800">The registration deadline for this tournament has passed. New registrations are closed.</span>
+                  </div>
+                </div>
+              ) : tournament.registrationDeadline ? (
                 <RegistrationCountdown deadline={tournament.registrationDeadline} variant="modal-banner" />
-              )}
+              ) : null}
 
               {/* HIGH-VISIBILITY OFFICIAL EVENT PORTAL / WEBSITE LINK BANNER */}
               {tournament.officialLink && (
@@ -1066,12 +1075,12 @@ export const TournamentDetailModal: React.FC<TournamentDetailModalProps> = ({
                 <span>Donate to Relief Fund</span>
                 <ExternalLink className="h-4 w-4" />
               </a>
-            ) : tournament.registrationDeadline && calculateTimeRemaining(tournament.registrationDeadline)?.isExpired ? (
+            ) : isEventRegistrationEnded(tournament) || (tournament.registrationDeadline && calculateTimeRemaining(tournament.registrationDeadline)?.isExpired) ? (
               <button
                 disabled
                 className="flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300"
               >
-                <span>Registration Closed</span>
+                <span>Registration Ended</span>
               </button>
             ) : (
               <button

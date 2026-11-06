@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Tournament, Registration, CommunityVideo } from '../types';
 import { DEFAULT_POSTER_FALLBACK } from '../data/mockTournaments';
+import { isEventRegistrationEnded } from '../utils/countdown';
 
 // Supabase configuration
 export const SUPABASE_URL = 'https://tevzpqfoaumgzpljimrc.supabase.co';
@@ -140,6 +141,12 @@ export const fetchCloudTournamentsWithDeleted = async (forceFresh = false): Prom
         registrationDeadline: row.registration_deadline || extra.registrationDeadline,
         createdAt: row.created_at || new Date().toISOString(),
       };
+
+      // Once registration has ended, remove the tournament
+      if (isEventRegistrationEnded(tournament)) {
+        deletedIds.push(row.id);
+        continue;
+      }
 
       activeTournaments.push(tournament);
     }

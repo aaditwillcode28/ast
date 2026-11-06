@@ -15,15 +15,18 @@ export interface CountdownTime {
  * Parses deadline string to a timestamp (defaults to 23:59:59 NPT if only date is provided)
  */
 export function getDeadlineTimestamp(deadlineStr?: string): number | null {
-  if (!deadlineStr) return null;
+  if (!deadlineStr || typeof deadlineStr !== 'string') return null;
 
-  // If date only format YYYY-MM-DD, set deadline to 23:59:59 end-of-day
-  if (/^\d{4}-\d{2}-\d{2}$/.test(deadlineStr)) {
-    const d = new Date(`${deadlineStr}T23:59:59+05:45`);
+  const trimmed = deadlineStr.trim();
+  if (!trimmed) return null;
+
+  // If date only format YYYY-MM-DD, set deadline to 23:59:59 end-of-day in Nepal (UTC+5:45)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const d = new Date(`${trimmed}T23:59:59+05:45`);
     return isNaN(d.getTime()) ? null : d.getTime();
   }
 
-  const d = new Date(deadlineStr);
+  const d = new Date(trimmed);
   return isNaN(d.getTime()) ? null : d.getTime();
 }
 
@@ -87,32 +90,42 @@ export function formatCountdownBadge(time: CountdownTime): { text: string; urgen
 }
 
 /**
- * Checks whether an event's registration period (or event date) has completely passed.
- * Returns true if registration has closed and event has finished.
+ * Checks whether an event's registration has ended.
+ * Returns true if registration deadline has passed or the event date has passed.
  */
-export function isEventRegistrationEnded(tournament: {
+export function isEventRegistrationEnded(tournament?: {
   registrationDeadline?: string;
+  registration_deadline?: string;
   startDate?: string;
+  start_date?: string;
   endDate?: string;
+  end_date?: string;
+  date?: string;
   isReliefFund?: boolean;
+  is_relief?: boolean;
+  isCharity?: boolean;
+  category?: string;
 }): boolean {
+  if (!tournament) return false;
+
   // Relief funds stay active indefinitely unless specifically concluded
-  if (tournament.isReliefFund) {
+  if (tournament.isReliefFund || tournament.is_relief || tournament.category === 'Charity & Relief') {
     return false;
   }
 
   const now = Date.now();
 
   // 1. If explicit registration deadline exists
-  if (tournament.registrationDeadline) {
-    const deadlineTs = getDeadlineTimestamp(tournament.registrationDeadline);
+  const deadlineStr = tournament.registrationDeadline || tournament.registration_deadline;
+  if (deadlineStr) {
+    const deadlineTs = getDeadlineTimestamp(deadlineStr);
     if (deadlineTs && now > deadlineTs) {
       return true;
     }
   }
 
-  // 2. If no deadline, check tournament end date or start date
-  const eventDateStr = tournament.endDate || tournament.startDate;
+  // 2. If event end date, start date, or date has passed
+  const eventDateStr = tournament.endDate || tournament.end_date || tournament.startDate || tournament.start_date || tournament.date;
   if (eventDateStr) {
     const eventTs = getDeadlineTimestamp(eventDateStr);
     if (eventTs && now > eventTs) {

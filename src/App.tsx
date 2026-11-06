@@ -111,29 +111,27 @@ export const isTestOrPlaceholderTournament = (item: any): boolean => {
   return false;
 };
 
-// Helper to determine if an event has concluded
+// Helper to determine if an event has concluded / registration ended
 export const isConcludedTournament = (t: Tournament): boolean => {
   if (t.isReliefFund) {
     return false; // Relief initiatives are ongoing public appeals
   }
-  const dateStr = t.endDate || t.startDate || t.date;
-  if (!dateStr) return false;
-  const today = new Date().toISOString().split('T')[0];
-  return dateStr < today;
+  return isEventRegistrationEnded(t);
 };
 
 export default function App() {
-  // 1. Tournaments State (strictly real events - all demo/fake listings purged)
+  // 1. Tournaments State (strictly real events - all demo/fake listings and ended registrations purged)
   const [tournaments, setTournaments] = useState<Tournament[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.TOURNAMENTS);
       if (saved) {
         const parsed: Tournament[] = JSON.parse(saved);
-        // Completely filter out fake/demo legacy cards
+        // Completely filter out fake/demo legacy cards and tournaments whose registration has ended
         const cleaned = parsed.filter(
           (item) =>
             !isTestOrPlaceholderTournament(item) &&
-            !isDemoTournament(item)
+            !isDemoTournament(item) &&
+            !isEventRegistrationEnded(item)
         );
 
         try {
@@ -145,7 +143,7 @@ export default function App() {
     } catch (e) {
       console.error('Error loading tournaments from storage', e);
     }
-    return INITIAL_TOURNAMENTS;
+    return INITIAL_TOURNAMENTS.filter((item) => !isEventRegistrationEnded(item));
   });
 
   // 2. Registrations State (with local storage)
@@ -268,10 +266,19 @@ export default function App() {
   const [hostModalCategory, setHostModalCategory] = useState<string | undefined>(undefined);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Startup sweep: ensure any legacy community video items or deleted items are purged from tournament state
+  // Real-time ticker to auto-expire tournaments as soon as their registration deadline arrives
+  const [currentTimeTick, setCurrentTimeTick] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeTick(Date.now());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Startup sweep: ensure any legacy community video items, deleted items, or ended tournaments are purged from tournament state
   useEffect(() => {
     setTournaments((prev) => {
-      const filtered = prev.filter((t) => !isTestOrPlaceholderTournament(t) && !isDemoTournament(t));
+      const filtered = prev.filter((t) => !isTestOrPlaceholderTournament(t) && !isDemoTournament(t) && !isEventRegistrationEnded(t));
       if (filtered.length !== prev.length) {
         try {
           localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(filtered));
@@ -408,15 +415,15 @@ export default function App() {
         setTournaments((prev) => {
           const map = new Map<string, Tournament>();
 
-          // Cloud active tournaments are authoritative (videos strictly excluded)
+          // Cloud active tournaments are authoritative (videos and ended registrations strictly excluded)
           activeTournaments
-            .filter((t) => !isDemoTournament(t) && !isTestOrPlaceholderTournament(t) && !deletedSet.has(t.id))
+            .filter((t) => !isDemoTournament(t) && !isTestOrPlaceholderTournament(t) && !deletedSet.has(t.id) && !isEventRegistrationEnded(t))
             .forEach((t) => map.set(t.id, t));
 
           // Retain local listings only if created within the last 45 seconds on this device (optimistic UI)
           const now = Date.now();
           prev.forEach((t) => {
-            if (isTestOrPlaceholderTournament(t) || isDemoTournament(t)) return;
+            if (isTestOrPlaceholderTournament(t) || isDemoTournament(t) || isEventRegistrationEnded(t)) return;
             const age = now - (new Date(t.createdAt).getTime() || 0);
             if (age < 45000 && !deletedSet.has(t.id)) {
               if (!map.has(t.id)) {
@@ -426,7 +433,7 @@ export default function App() {
           });
 
           const finalList = Array.from(map.values()).filter(
-            (t) => !isTestOrPlaceholderTournament(t) && !isDemoTournament(t)
+            (t) => !isTestOrPlaceholderTournament(t) && !isDemoTournament(t) && !isEventRegistrationEnded(t)
           );
           try {
             localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(finalList));
@@ -754,28 +761,30 @@ export default function App() {
     showToast(`Successfully removed ${count} test/placeholder listing(s).`);
   };
 
-  // Category counts for quick badges
+  // Category counts for quick badges (strictly active events with open registration)
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: tournaments.length };
+    const counts: Record<string, number> = { all: 0 };
     tournaments.forEach((t) => {
+      if (isEventRegistrationEnded(t)) return;
+      counts.all = (counts.all || 0) + 1;
       counts[t.category] = (counts[t.category] || 0) + 1;
       if (t.isCharity) {
         counts['Charity & Relief'] = (counts['Charity & Relief'] || 0) + 1;
       }
     });
     return counts;
-  }, [tournaments]);
+  }, [tournaments, currentTimeTick]);
 
   // Count concluded tournaments
   const concludedCount = useMemo(() => {
-    return tournaments.filter(isConcludedTournament).length;
-  }, [tournaments]);
+    return tournaments.filter(isEventRegistrationEnded).length;
+  }, [tournaments, currentTimeTick]);
 
   // Filtered & Sorted Tournaments
   const filteredTournaments = useMemo(() => {
     const result = tournaments.filter((t) => {
-      // 0. Concluded / past events filter
-      if (!showConcluded && isConcludedTournament(t)) {
+      // 0. Once registration has ended, remove the tournament
+      if (isEventRegistrationEnded(t)) {
         return false;
       }
 
@@ -918,7 +927,7 @@ export default function App() {
       if (!a.isFeatured && b.isFeatured) return 1;
       return 0;
     });
-  }, [tournaments, filters, interestedEventIds, sortBy, showConcluded]);
+  }, [tournaments, filters, interestedEventIds, sortBy, showConcluded, currentTimeTick]);
 
   // Hosted tournaments list
   const userHostedTournaments = useMemo(() => {

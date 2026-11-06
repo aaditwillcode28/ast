@@ -49,6 +49,7 @@ import {
   setAdminPin,
   clearAllActivityLogs
 } from '../utils/activityTracker';
+import { isEventRegistrationEnded } from '../utils/countdown';
 
 interface AdminHubModalProps {
   isOpen: boolean;
@@ -805,13 +806,11 @@ export const AdminHubModal: React.FC<AdminHubModalProps> = ({
 
           {/* TAB: TOURNAMENTS & EVENTS MANAGEMENT (DELETE EVENTS & CLEAN FINISHED) */}
           {activeTab === 'tournaments' && (() => {
-            const today = new Date().toISOString().split('T')[0];
             const isFinishedEvent = (t: Tournament) => {
               if (t.isReliefFund || t.hasNoSlots) {
                 return false;
               }
-              const d = t.endDate || t.startDate || t.date;
-              return Boolean(d && d < today);
+              return isEventRegistrationEnded(t);
             };
 
             const filteredList = tournaments.filter((t) => {
